@@ -1,0 +1,56 @@
+[
+{
+  "directory": "/opt/watchdog/users/parth/cuda_kernels/layer_norm/build",
+  "command": "/usr/local/cuda-12.9/bin/nvcc -forward-unknown-to-host-compiler  --options-file CMakeFiles/layer_norm_objs.dir/includes_CUDA.rsp  -O3 --use_fast_math -Xcudafe --diag_suppress=20054 -std=c++17 \"--generate-code=arch=compute_120,code=[compute_120,sm_120]\" -Xcompiler=-fPIC -x cu -rdc=true -c /opt/watchdog/users/parth/cuda_kernels/layer_norm/src/layer_norm_simple.cu -o CMakeFiles/layer_norm_objs.dir/src/layer_norm_simple.cu.o",
+  "file": "/opt/watchdog/users/parth/cuda_kernels/layer_norm/src/layer_norm_simple.cu",
+  "output": "CMakeFiles/layer_norm_objs.dir/src/layer_norm_simple.cu.o"
+},
+{
+  "directory": "/opt/watchdog/users/parth/cuda_kernels/layer_norm/build",
+  "command": "/usr/local/cuda-12.9/bin/nvcc -forward-unknown-to-host-compiler  --options-file CMakeFiles/layer_norm_objs.dir/includes_CUDA.rsp  -O3 --use_fast_math -Xcudafe --diag_suppress=20054 -std=c++17 \"--generate-code=arch=compute_120,code=[compute_120,sm_120]\" -Xcompiler=-fPIC -x cu -rdc=true -c /opt/watchdog/users/parth/cuda_kernels/layer_norm/src/layer_norm_simple_async.cu -o CMakeFiles/layer_norm_objs.dir/src/layer_norm_simple_async.cu.o",
+  "file": "/opt/watchdog/users/parth/cuda_kernels/layer_norm/src/layer_norm_simple_async.cu",
+  "output": "CMakeFiles/layer_norm_objs.dir/src/layer_norm_simple_async.cu.o"
+},
+{
+  "directory": "/opt/watchdog/users/parth/cuda_kernels/layer_norm/build",
+  "command": "/usr/local/cuda-12.9/bin/nvcc -forward-unknown-to-host-compiler  --options-file CMakeFiles/layer_norm_objs.dir/includes_CUDA.rsp  -O3 --use_fast_math -Xcudafe --diag_suppress=20054 -std=c++17 \"--generate-code=arch=compute_120,code=[compute_120,sm_120]\" -Xcompiler=-fPIC -x cu -rdc=true -c /opt/watchdog/users/parth/cuda_kernels/layer_norm/src/layer_norm_simple_dsmem.cu -o CMakeFiles/layer_norm_objs.dir/src/layer_norm_simple_dsmem.cu.o",
+  "file": "/opt/watchdog/users/parth/cuda_kernels/layer_norm/src/layer_norm_simple_dsmem.cu",
+  "output": "CMakeFiles/layer_norm_objs.dir/src/layer_norm_simple_dsmem.cu.o"
+},
+{
+  "directory": "/opt/watchdog/users/parth/cuda_kernels/layer_norm/build",
+  "command": "/usr/local/cuda-12.9/bin/nvcc -forward-unknown-to-host-compiler  --options-file CMakeFiles/layer_norm_objs.dir/includes_CUDA.rsp  -O3 --use_fast_math -Xcudafe --diag_suppress=20054 -std=c++17 \"--generate-code=arch=compute_120,code=[compute_120,sm_120]\" -Xcompiler=-fPIC -x cu -rdc=true -c /opt/watchdog/users/parth/cuda_kernels/layer_norm/src/layer_norm_simple_dsmem_async_v1.cu -o CMakeFiles/layer_norm_objs.dir/src/layer_norm_simple_dsmem_async_v1.cu.o",
+  "file": "/opt/watchdog/users/parth/cuda_kernels/layer_norm/src/layer_norm_simple_dsmem_async_v1.cu",
+  "output": "CMakeFiles/layer_norm_objs.dir/src/layer_norm_simple_dsmem_async_v1.cu.o"
+},
+{
+  "directory": "/opt/watchdog/users/parth/cuda_kernels/layer_norm/build",
+  "command": "/usr/local/cuda-12.9/bin/nvcc -forward-unknown-to-host-compiler  --options-file CMakeFiles/layer_norm_objs.dir/includes_CUDA.rsp  -O3 --use_fast_math -Xcudafe --diag_suppress=20054 -std=c++17 \"--generate-code=arch=compute_120,code=[compute_120,sm_120]\" -Xcompiler=-fPIC -x cu -rdc=true -c /opt/watchdog/users/parth/cuda_kernels/layer_norm/src/layer_norm_simple_dsmem_async_v2.cu -o CMakeFiles/layer_norm_objs.dir/src/layer_norm_simple_dsmem_async_v2.cu.o",
+  "file": "/opt/watchdog/users/parth/cuda_kernels/layer_norm/src/layer_norm_simple_dsmem_async_v2.cu",
+  "output": "CMakeFiles/layer_norm_objs.dir/src/layer_norm_simple_dsmem_async_v2.cu.o"
+},
+{
+  "directory": "/opt/watchdog/users/parth/cuda_kernels/layer_norm/build",
+  "command": "/usr/local/cuda-12.9/bin/nvcc -forward-unknown-to-host-compiler  --options-file CMakeFiles/layer_norm_objs.dir/includes_CUDA.rsp  -O3 --use_fast_math -Xcudafe --diag_suppress=20054 -std=c++17 \"--generate-code=arch=compute_120,code=[compute_120,sm_120]\" -Xcompiler=-fPIC -x cu -rdc=true -c /opt/watchdog/users/parth/cuda_kernels/layer_norm/src/layer_norm_simple_persistant.cu -o CMakeFiles/layer_norm_objs.dir/src/layer_norm_simple_persistant.cu.o",
+  "file": "/opt/watchdog/users/parth/cuda_kernels/layer_norm/src/layer_norm_simple_persistant.cu",
+  "output": "CMakeFiles/layer_norm_objs.dir/src/layer_norm_simple_persistant.cu.o"
+},
+{
+  "directory": "/opt/watchdog/users/parth/cuda_kernels/layer_norm/build",
+  "command": "/usr/local/cuda-12.9/bin/nvcc -forward-unknown-to-host-compiler  --options-file CMakeFiles/layer_norm_objs.dir/includes_CUDA.rsp  -O3 --use_fast_math -Xcudafe --diag_suppress=20054 -std=c++17 \"--generate-code=arch=compute_120,code=[compute_120,sm_120]\" -Xcompiler=-fPIC -x cu -rdc=true -c /opt/watchdog/users/parth/cuda_kernels/layer_norm/src/layer_norm_wellford_async.cu -o CMakeFiles/layer_norm_objs.dir/src/layer_norm_wellford_async.cu.o",
+  "file": "/opt/watchdog/users/parth/cuda_kernels/layer_norm/src/layer_norm_wellford_async.cu",
+  "output": "CMakeFiles/layer_norm_objs.dir/src/layer_norm_wellford_async.cu.o"
+},
+{
+  "directory": "/opt/watchdog/users/parth/cuda_kernels/layer_norm/build",
+  "command": "/usr/local/cuda-12.9/bin/nvcc -forward-unknown-to-host-compiler  --options-file CMakeFiles/layer_norm_objs.dir/includes_CUDA.rsp  -O3 --use_fast_math -Xcudafe --diag_suppress=20054 -std=c++17 \"--generate-code=arch=compute_120,code=[compute_120,sm_120]\" -Xcompiler=-fPIC -x cu -rdc=true -c /opt/watchdog/users/parth/cuda_kernels/layer_norm/src/main.cu -o CMakeFiles/layer_norm_objs.dir/src/main.cu.o",
+  "file": "/opt/watchdog/users/parth/cuda_kernels/layer_norm/src/main.cu",
+  "output": "CMakeFiles/layer_norm_objs.dir/src/main.cu.o"
+},
+{
+  "directory": "/opt/watchdog/users/parth/cuda_kernels/layer_norm/build",
+  "command": "/usr/local/cuda-12.9/bin/nvcc -forward-unknown-to-host-compiler  --options-file CMakeFiles/layer_norm_test.dir/includes_CUDA.rsp  -O3 --use_fast_math -Xcudafe --diag_suppress=20054 -std=c++17 \"--generate-code=arch=compute_120,code=[compute_120,sm_120]\" -x cu -rdc=true -c /opt/watchdog/users/parth/cuda_kernels/layer_norm/layer_norm.cu -o CMakeFiles/layer_norm_test.dir/layer_norm.cu.o",
+  "file": "/opt/watchdog/users/parth/cuda_kernels/layer_norm/layer_norm.cu",
+  "output": "CMakeFiles/layer_norm_test.dir/layer_norm.cu.o"
+}
+]
