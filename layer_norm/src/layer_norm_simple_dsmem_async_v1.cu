@@ -236,11 +236,7 @@ void layer_norm_simple_dsmem_async_v1(float *X, float *Y, float *gamma, float *b
         }
     }
 
-    // ---------------------------
-    // pointwise/apply launch (non-cluster)
-    // ---------------------------
     {
-        // match kernel’s internal partitioning:
         cudaDeviceSynchronize();
         int threads_per_batch = (int)((BLOCK_SIZE + B - 1) / B);
         int grid_x            = (int)((STRIDE + threads_per_batch - 1) / threads_per_batch);

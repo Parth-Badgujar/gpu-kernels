@@ -219,15 +219,13 @@ __global__ void _layer_norm_simple_dsmem(float* __restrict__ Y, float* __restric
 
 
 void layer_norm_simple_dsmem(float *X, float *Y, float *gamma, float *beta, size_t B, size_t F, size_t D1, size_t D2){
-    auto max = std::max<size_t>; 
-    auto min = std::min<size_t>; 
     const size_t MAX_CLUSTERS   = 8; //SM_120 :(
     const size_t MAX_BLOCK_SIZE = 1024;
     const size_t STRIDE         = F * D1 * D2;
     const size_t VECTOR_SIZE    = (STRIDE + 3) / 4; //Vectorized loads
     const size_t LENGTH         = next_power_of_2(VECTOR_SIZE);
-    const size_t BLOCK_SIZE     = max(32, min(MAX_BLOCK_SIZE, LENGTH));
-    const size_t NUM_CLUSTERS   = min(MAX_CLUSTERS, (LENGTH + BLOCK_SIZE - 1) / BLOCK_SIZE); 
+    const size_t BLOCK_SIZE     = std::max<size_t>(32, std::min(MAX_BLOCK_SIZE, LENGTH));
+    const size_t NUM_CLUSTERS   = std::min(MAX_CLUSTERS, (LENGTH + BLOCK_SIZE - 1) / BLOCK_SIZE); 
     const size_t GRID_SIZE      = B * NUM_CLUSTERS;
     // const size_t DSMEM_BYTES    = BLOCK_SIZE * 4 + 4 * 4 * BLOCK_SIZE * 3;
     dim3 gridDim(GRID_SIZE);

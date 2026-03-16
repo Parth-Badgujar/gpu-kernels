@@ -1,6 +1,6 @@
 #include <cooperative_groups.h>
 #include <iostream>
-#include <kernels.h>
+#include "src/kernels.h"
 #include <omp.h>
 #include <stdlib.h>
 #include <thrust/device_vector.h>
@@ -9,7 +9,7 @@
 #include <thrust/host_vector.h>
 #include <thrust/random.h>
 #include <thrust/reduce.h>
-#include <utils.h>
+#include "src/utils.h"
 
 void layer_norm_cpu(float *X, float *Y, float *gamma, float *beta, size_t B,
                     size_t F, size_t D1, size_t D2) {
@@ -251,14 +251,14 @@ void benchmark_configs(
 int main() {
   std::vector<std::pair<const char *, kernel_t>> kernels = {
       {"layer_norm_simple_dsmem", layer_norm_simple_dsmem},
-      // {"layer_norm_simple_async", layer_norm_simple_async},
-      // {"layer_norm_simple", layer_norm_simple},
-      {"layer_norm_simple_dsmem_async_v2", layer_norm_simple_dsmem_async_v2},
-      // {"layer_norm_simple_dsmem_async_v1", layer_norm_simple_dsmem_async_v1},
-      // {"layer_norm_simple_persistant", layer_norm_simple_persistant}
+      {"layer_norm_simple_async", layer_norm_simple_async},
+      {"layer_norm_simple", layer_norm_simple},
+      // {"layer_norm_simple_dsmem_async_v2", layer_norm_simple_dsmem_async_v2},
+      {"layer_norm_simple_dsmem_async_v1", layer_norm_simple_dsmem_async_v1},
+      {"layer_norm_simple_persistant", layer_norm_simple_persistant}
   };
 
-  std::vector<config_t> configs = {{4, 128, 64, 64}, {4, 4, 4, 4}};
+  std::vector<config_t> configs = {{32, 128, 64, 64}};
 
   test_kernels_all(kernels, configs);
 

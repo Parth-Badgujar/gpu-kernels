@@ -1,8 +1,6 @@
 #include <cuda_runtime.h>
 #include <cuda.h>
-#include <utils.h>
-#include <map>
-#include <stdexcept>
+#include "utils.h"
 #include <math_constants.h>
 #include <cuda_bf16.h>
 typedef unsigned int uint;

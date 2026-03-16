@@ -1,8 +1,6 @@
 #include <cuda_runtime.h>
 #include <cuda.h>
-#include <utils.h>
-#include <map>
-#include <stdexcept>
+#include "utils.h"
 #include <cuda_fp16.h>
 #include <stdint.h>
 #include <cuda_bf16.h>
@@ -99,7 +97,7 @@ __global__ void _flash_attention_simple_v2_fwd(
     const uint32_t kv_len
 )
 {
-    //Double buffer thus sh*t
+    //Double
     extern __shared__ bf16 smem[];
     bf16 *Q_smem = smem;
     bf16 *K_smem = smem + BLOCK_Q * DIM;

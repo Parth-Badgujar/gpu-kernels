@@ -1,10 +1,12 @@
 import torch
 
-def create_tensors(M, N, K, sf_vec_size = 16):
-    a = torch.randint(-128, 127, (M, K // 2), device = "cuda").to(torch.float4_e2m1fn_x2)
-    b = torch.randint(-128, 127, (N, K // 2), device = "cuda").to(torch.float4_e2m1fn_x2)
-    sfa = torch.randint(0, 4, (M, K // sf_vec_size), device = "cuda").to(torch.float8_e4m3fn)
-    sfb = torch.randint(0, 4, (N, K // sf_vec_size), device = "cuda").to(torch.float8_e4m3fn)
+def create_tensors(M, N, K, sf_vec_size = 16, seed = 42):
+    generator = torch.Generator()
+    generator.manual_seed(seed)
+    a = torch.randint(-128, 127, (M, K // 2), device = "cuda", generator = generator).to(torch.float4_e2m1fn_x2)
+    b = torch.randint(-128, 127, (N, K // 2), device = "cuda", generator = generator).to(torch.float4_e2m1fn_x2)
+    sfa = torch.randint(0, 4, (M, K // sf_vec_size), device = "cuda", generator = generator).to(torch.float8_e4m3fn)
+    sfb = torch.randint(0, 4, (N, K // sf_vec_size), device = "cuda", generator = generator).to(torch.float8_e4m3fn)
     rest_k = K // 4
     rest_m = M // 128
     rest_n = N // 128

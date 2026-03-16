@@ -5,7 +5,7 @@
 #include <thrust/functional.h>
 #include <thrust/random.h>
 #include <iostream>
-#include <utils.h>
+#include "src/utils.h"
 #include <stdlib.h>
 #include <cooperative_groups.h>
 #include <kernels.h>
