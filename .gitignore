@@ -4,3 +4,6 @@ build/
 .ipynb_checkpoints/
 .clangd/
 *.ipynb
+*.bin
+*.json
+.clang-format

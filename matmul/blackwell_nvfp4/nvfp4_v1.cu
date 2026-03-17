@@ -12,18 +12,15 @@
 #include <cuda_fp8.h>
 #include <cuda_runtime.h>
 
-
-using fp8 = __nv_fp8_e8m0;
-using fp4 = __nv_fp4_e2m1;
+using fp8 = __nv_fp8_e4m3;
 using fp16 = __half;
 
 template <int BLOCK_M, int BLOCK_N, int BLOCK_K>
-__global__ void
-_matmul_nvfp4_v1(const __grid_constant__ CUtensorMap tmap_A,
-                 const __grid_constant__ CUtensorMap tmap_B,
-                 const __grid_constant__ CUtensorMap tmap_sfa,
-                 const __grid_constant__ CUtensorMap tmap_sfb, 
-                int stride_cm, int stride_cn, fp16 *d_c_mat) {
+__global__ void _matmul_nvfp4_v1(const __grid_constant__ CUtensorMap tmap_A,
+                                 const __grid_constant__ CUtensorMap tmap_B,
+                                 const __grid_constant__ CUtensorMap tmap_sfa,
+                                 const __grid_constant__ CUtensorMap tmap_sfb,
+                                 int stride_cm, int stride_cn, fp16 *d_c_mat) {
     const int block_x = blockIdx.x;
     const int block_y = blockIdx.y;
     fp16 *c_mat =
@@ -108,8 +105,8 @@ _matmul_nvfp4_v1(const __grid_constant__ CUtensorMap tmap_A,
     }
 }
 
-CUtensorMap make_tma_descriptor_fp4_A(void *global_addr, uint64_t M,
-                                      uint64_t K) {
+static CUtensorMap make_tma_descriptor_fp4_A(void *global_addr, uint64_t M,
+                                             uint64_t K) {
     CUtensorMap tma_desc;
     uint64_t globalDim[2] = {K / 2, M};
     uint64_t globalStrides[1] = {K / 2};
@@ -123,8 +120,8 @@ CUtensorMap make_tma_descriptor_fp4_A(void *global_addr, uint64_t M,
     return tma_desc;
 }
 
-CUtensorMap make_tma_descriptor_fp4_B(void *global_addr, uint64_t N,
-                                      uint64_t K) {
+static CUtensorMap make_tma_descriptor_fp4_B(void *global_addr, uint64_t N,
+                                             uint64_t K) {
     CUtensorMap tma_desc;
     uint64_t globalDim[2] = {K / 2, N};
     uint64_t globalStrides[1] = {K / 2};
@@ -138,7 +135,8 @@ CUtensorMap make_tma_descriptor_fp4_B(void *global_addr, uint64_t N,
     return tma_desc;
 }
 
-CUtensorMap make_tma_descriptor_sf(void *global_addr, uint64_t M, uint64_t K) {
+static CUtensorMap make_tma_descriptor_sf(void *global_addr, uint64_t M,
+                                          uint64_t K) {
     CUtensorMap tma_desc;
     uint64_t globalDim[4] = {128, 4, (K / 16) / 4, M / 128};
     uint64_t globalStrides[3] = {128, 128 * 4, 128 * 4 * (K / 16) / 4};
@@ -152,7 +150,8 @@ CUtensorMap make_tma_descriptor_sf(void *global_addr, uint64_t M, uint64_t K) {
     return tma_desc;
 }
 
-void matmul_nvfp4_v1(fp16* c, const uint8_t *sfa, const uint8_t* sfb, const uint8_t* a, const uint8_t* b, int M, int N, int K) {
+void matmul_nvfp4_v1(fp16 *c, const uint8_t *sfa, const uint8_t *sfb,
+                     const uint8_t *a, const uint8_t *b, int M, int N, int K) {
     assert(K == 64);
     constexpr int BLOCK_M = 128;
     constexpr int BLOCK_N = 256;
@@ -164,10 +163,10 @@ void matmul_nvfp4_v1(fp16* c, const uint8_t *sfa, const uint8_t* sfb, const uint
     CUtensorMap tmap_B = make_tma_descriptor_fp4_B((void *)b, N, K);
     CUtensorMap tmap_sfA = make_tma_descriptor_sf((void *)sfa, M, K);
     CUtensorMap tmap_sfB = make_tma_descriptor_sf((void *)sfb, N, K);
-    
+
     int stride_cm = N;
     int stride_cn = 1;
-    _matmul_nvfp4_v1<BLOCK_M, BLOCK_N, BLOCK_K>
-        <<<grid, block>>>(tmap_A, tmap_B, tmap_sfA, tmap_sfB, stride_cm, stride_cn, c);
+    _matmul_nvfp4_v1<BLOCK_M, BLOCK_N, BLOCK_K><<<grid, block>>>(
+        tmap_A, tmap_B, tmap_sfA, tmap_sfB, stride_cm, stride_cn, c);
     cudaDeviceSynchronize();
 }

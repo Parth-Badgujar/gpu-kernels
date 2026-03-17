@@ -19,7 +19,7 @@ __device__ __forceinline__
 void store256(void* ptr, uint32_t* src)
 {
     asm volatile(
-        "st.global.v8.b32 [%0], {%1,%2,%3,%4,%5,%6,%7,%8};\n"
+        "st.global.L1::no_allocate.v8.b32 [%0], {%1,%2,%3,%4,%5,%6,%7,%8};\n"
         :
         : "l"(ptr),
           "r"(src[0]), "r"(src[1]), "r"(src[2]), "r"(src[3]),

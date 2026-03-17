@@ -1,7 +1,8 @@
 import torch
+import triton
 
 def create_tensors(M, N, K, sf_vec_size = 16, seed = 42):
-    generator = torch.Generator()
+    generator = torch.Generator(device = "cuda")
     generator.manual_seed(seed)
     a = torch.randint(-128, 127, (M, K // 2), device = "cuda", generator = generator).to(torch.float4_e2m1fn_x2)
     b = torch.randint(-128, 127, (N, K // 2), device = "cuda", generator = generator).to(torch.float4_e2m1fn_x2)
@@ -26,3 +27,26 @@ def reference_kernel(a, b, sfa, sfb):
         out_dtype = torch.float16,
     )
     return res
+
+def save_tensors(a, b, sfa, sfb):
+    with open("a_mat.bin", "wb") as file:
+        file.write(a.cpu().view(torch.int8).numpy().tobytes())
+    with open("b_mat.bin", "wb") as file:
+        file.write(b.cpu().view(torch.int8).numpy().tobytes())
+    with open("a_scales.bin", "wb") as file:
+        file.write(sfa.cpu().view(torch.int8).numpy().tobytes())
+    with open("b_scales.bin", "wb") as file:
+        file.write(sfb.cpu().view(torch.int8).numpy().tobytes())
+
+
+if __name__ == "__main__":
+    M = 1024
+    N = 1024
+    K = 256
+    a, b, sfa, sfb = create_tensors(M, N, K)
+    ref = reference_kernel(a, b, sfa, sfb)
+    warmup = 10
+    rep = 100
+    time_taken = triton.testing.do_bench(lambda: reference_kernel(a, b, sfa, sfb), warmup = warmup, rep = rep)
+    print("Torch :", time_taken)
+    print("TFLOPS :", (2 * M * N * K) / (time_taken * 1e9))

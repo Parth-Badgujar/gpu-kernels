@@ -17,11 +17,11 @@ set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_INCLUDES 0)
 include_directories(${CUDA_HOME}/include)
 include_directories(${CUDA_HOME}/include/cccl)
 
-add_executable(nvfp4_v1 nvfp4_v1.cu)
-target_link_libraries(nvfp4_v1 PRIVATE cuda)
-add_executable(nvfp4_v2 nvfp4_v2.cu)
-target_link_libraries(nvfp4_v2 PRIVATE cuda)
-add_executable(nvfp4_v3 nvfp4_v3.cu)
-target_link_libraries(nvfp4_v3 PRIVATE cuda)
-add_executable(nvfp4_v4 nvfp4_v4.cu)
-target_link_libraries(nvfp4_v4 PRIVATE cuda)
+add_executable(nvfp4_gemm
+    nvfp4_v1.cu
+    nvfp4_v2.cu
+    nvfp4_v3.cu
+    nvfp4_v4.cu
+    runner.cu
+)
+target_link_libraries(nvfp4_gemm PRIVATE cuda)

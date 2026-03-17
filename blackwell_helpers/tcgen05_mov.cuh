@@ -1,26 +1,26 @@
 #pragma once
 #include <cstdint>
 
-__device__ void tcgen_cp_32x128_warpx4(uint32_t taddr, uint64_t sdesc) {
+__device__ __forceinline__ void tcgen_cp_32x128_warpx4(uint32_t taddr, uint64_t sdesc) {
     asm volatile(
         "tcgen05.cp.cta_group::1.32x128b.warpx4 [%0], %1;" ::"r"(taddr),
         "l"(sdesc)
         : "memory");
 }
 
-__device__ void tcgen_cp_128x128(uint32_t taddr, uint64_t sdesc) {
+__device__ __forceinline__ void tcgen_cp_128x128(uint32_t taddr, uint64_t sdesc) {
     asm volatile("tcgen05.cp.cta_group::1.128x128b [%0], %1;" ::"r"(taddr),
                  "l"(sdesc)
                  : "memory");
 }
 
-__device__ void tcgen_cp_128x256(uint32_t taddr, uint64_t sdesc) {
+__device__ __forceinline__ void tcgen_cp_128x256(uint32_t taddr, uint64_t sdesc) {
     asm volatile("tcgen05.cp.cta_group::1.128x256b [%0], %1;" ::"r"(taddr),
                  "l"(sdesc)
                  : "memory");
 }
 
-__device__ void tcgen_ld_32x32_x128(float tmp[], uint32_t addr) {
+__device__ __forceinline__ void tcgen_ld_32x32_x128(float tmp[], uint32_t addr) {
     asm volatile(
         "tcgen05.ld.sync.aligned.32x32b.x128.b32 {%0, %1, %2, %3, %4, %5, %6, %7, %8, %9, "
         "%10, %11, %12, %13, %14, %15, %16, %17, %18, %19, %20, %21, %22, %23, %24, %25, %26, "
@@ -66,7 +66,7 @@ __device__ void tcgen_ld_32x32_x128(float tmp[], uint32_t addr) {
         : "r"(addr));
 }
 
-__device__ void tcgen_ld_32x32_x8(float tmp[], uint32_t addr) {
+__device__ __forceinline__ void tcgen_ld_32x32_x8(float tmp[], uint32_t addr) {
     asm volatile("tcgen05.ld.sync.aligned.32x32b.x8.b32 {%0, %1, %2, %3, %4, "
                  "%5, %6, %7}, [%8];"
                  : "=f"(tmp[0]), "=f"(tmp[1]), "=f"(tmp[2]), "=f"(tmp[3]),
@@ -74,11 +74,11 @@ __device__ void tcgen_ld_32x32_x8(float tmp[], uint32_t addr) {
                  : "r"(addr));
 }
 
-__device__ void tcgen_ld_wait_sync() {
+__device__ __forceinline__ void tcgen_ld_wait_sync() {
     asm volatile("tcgen05.wait::ld.sync.aligned;");
 }
 
-__device__ void tcgen_alloc(uint32_t *tmem_addr_ptr, uint32_t ncols) {
+__device__ __forceinline__ void tcgen_alloc(uint32_t *tmem_addr_ptr, uint32_t ncols) {
     uint32_t addr = __cvta_generic_to_shared(tmem_addr_ptr);
     asm volatile(
         "tcgen05.alloc.cta_group::1.sync.aligned.shared::cta.b32 [%0], %1;"
@@ -87,7 +87,7 @@ __device__ void tcgen_alloc(uint32_t *tmem_addr_ptr, uint32_t ncols) {
         : "memory");
 }
 
-__device__ void tcgen_delloc(uint32_t taddr, uint32_t ncols) {
+__device__ __forceinline__ void tcgen_delloc(uint32_t taddr, uint32_t ncols) {
     asm volatile("tcgen05.dealloc.cta_group::1.sync.aligned.b32 %0, %1;"
                  :
                  : "r"(taddr), "r"(ncols)

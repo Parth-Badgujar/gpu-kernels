@@ -10,22 +10,21 @@
 #include <cuda_fp16.h>
 #include <cuda_fp8.h>
 #include <cuda_runtime.h>
+#include <iostream>
 
 #define MMA_K 64
 #define MMA_M 128
 #define MMA_N 256
 
-
-using fp8 = __nv_fp8_e8m0;
-using fp4 = __nv_fp4_e2m1;
+using fp8 = __nv_fp8_e4m3;
 using fp16 = __half;
-
 
 template <int BLOCK_M, int BLOCK_N, int BLOCK_K, int NUM_STAGES>
 __global__ void _matmul_nvfp4_v3(const __grid_constant__ CUtensorMap tmap_A,
-                              const __grid_constant__ CUtensorMap tmap_B,
-                              const uint8_t *d_a_scale, const uint8_t *d_b_scale,
-                              fp16 *d_c_mat, int M, int N, int K) {
+                                 const __grid_constant__ CUtensorMap tmap_B,
+                                 const uint8_t *d_a_scale,
+                                 const uint8_t *d_b_scale, fp16 *d_c_mat, int M,
+                                 int N, int K) {
     constexpr int SFA_SIZE = BLOCK_M * BLOCK_K / 16;
     constexpr int SFB_SIZE = BLOCK_N * BLOCK_K / 16;
     constexpr int A_SIZE = BLOCK_M * BLOCK_K / 2;
@@ -74,7 +73,8 @@ __global__ void _matmul_nvfp4_v3(const __grid_constant__ CUtensorMap tmap_A,
         uint32_t smem_a = A_shared + A_SIZE * stage_id;
         for (int k = 0; k < (BLOCK_K / 2) / 128; k++) {
             const int off_k = (BLOCK_K / 2) * i + k * 128;
-            tma_load_2d(smem_a + k * BLOCK_M * 128, (void *)&tmap_A, mbar_tma_ptr + stage_id * 8, off_k, off_m);
+            tma_load_2d(smem_a + k * BLOCK_M * 128, (void *)&tmap_A,
+                        mbar_tma_ptr + stage_id * 8, off_k, off_m);
         }
     };
     auto load_b_tma = [&](int i, int stage_id) {
@@ -82,7 +82,8 @@ __global__ void _matmul_nvfp4_v3(const __grid_constant__ CUtensorMap tmap_A,
         uint32_t smem_b = B_shared + B_SIZE * stage_id;
         for (int k = 0; k < (BLOCK_K / 2) / 128; k++) {
             const int off_k = (BLOCK_K / 2) * i + k * 128;
-            tma_load_2d(smem_b + k * BLOCK_N * 128, (void *)&tmap_B, mbar_tma_ptr + stage_id * 8, off_k, off_n);
+            tma_load_2d(smem_b + k * BLOCK_N * 128, (void *)&tmap_B,
+                        mbar_tma_ptr + stage_id * 8, off_k, off_n);
         }
     };
     auto load_sfa_tma = [&](int i, int stage_id) {
@@ -117,9 +118,13 @@ __global__ void _matmul_nvfp4_v3(const __grid_constant__ CUtensorMap tmap_A,
                 sfb_shared + stage_id * SFB_SIZE + mma_k * 512 + SFB_SIZE / 2,
                 8 * 16);
             uint64_t a_desc = make_smem_descriptor(
-                A_shared + stage_id * A_SIZE + (mma_k / 4) * (128 * BLOCK_M) + (mma_k % 4) * 32, 8 * 128, 16, 2);
+                A_shared + stage_id * A_SIZE + (mma_k / 4) * (128 * BLOCK_M) +
+                    (mma_k % 4) * 32,
+                8 * 128, 16, 2);
             uint64_t b_desc = make_smem_descriptor(
-                B_shared + stage_id * B_SIZE + (mma_k / 4) * (128 * BLOCK_N) + (mma_k % 4) * 32, 8 * 128, 16, 2);
+                B_shared + stage_id * B_SIZE + (mma_k / 4) * (128 * BLOCK_N) +
+                    (mma_k % 4) * 32,
+                8 * 128, 16, 2);
             tcgen_cp_32x128_warpx4(tmem[0], sfa_desc);
             tcgen_cp_32x128_warpx4(tmem[0] + 4, sfb1_desc);
             tcgen_cp_32x128_warpx4(tmem[0] + 8, sfb2_desc);
@@ -149,13 +154,9 @@ __global__ void _matmul_nvfp4_v3(const __grid_constant__ CUtensorMap tmap_A,
     if (warp_id == 0 && elect_sync()) {
         for (int i = 0; i < n_iters; i++) {
             int stage_id = i % NUM_STAGES;
-            // if (blockIdx.x == 0 && blockIdx.y == 0)
-            //     printf("waiting for mm for iter %d\n", i-1);
             mbarrier_wait(mbar_mm_ptr + stage_id * 8, mm_phase[stage_id]);
             mm_phase[stage_id] ^= 1;
             mbarrier_arrive_expect_tx(mbar_tma_ptr + stage_id * 8, STAGE_SIZE);
-            // if (blockIdx.x == 0 && blockIdx.y == 0)
-            //     printf("loads for iter %d\n", i);
             load_a_tma(i, stage_id);
             load_b_tma(i, stage_id);
             load_sfa_tma(i, stage_id);
@@ -164,13 +165,8 @@ __global__ void _matmul_nvfp4_v3(const __grid_constant__ CUtensorMap tmap_A,
     } else if (warp_id == 1 && elect_sync()) {
         for (int i = 0; i < n_iters; i++) {
             int stage_id = i % NUM_STAGES;
-            // if (blockIdx.x == 0 && blockIdx.y == 0) {
-            //     printf("waiting for loads for iter %d. Total Stage size expected: %d\n", i, STAGE_SIZE);
-            // }
             mbarrier_wait(mbar_tma_ptr + stage_id * 8, tma_phase[stage_id]);
             tma_phase[stage_id] ^= 1;
-            // if (blockIdx.x == 0 && blockIdx.y == 0)
-            //     printf("compute for iter %d\n", i);
             compute(i, stage_id);
             tcgen_commit_arrive_one(mbar_mm_ptr + stage_id * 8);
         }
@@ -178,17 +174,15 @@ __global__ void _matmul_nvfp4_v3(const __grid_constant__ CUtensorMap tmap_A,
     } else if (1 < warp_id && warp_id < 6) {
         mbarrier_wait(mbar_compute_ptr, 0);
         tcgen_after_thread_sync();
-        // if (warp_id == 2 && elect_sync() && blockIdx.x == 0 && blockIdx.y == 0){
-        //     printf("store\n");
-        // }
         store();
         if (warp_id == 4)
             tcgen_delloc(tmem[0], 512);
     }
 }
 
-CUtensorMap make_tma_descriptor_fp4_A(void *global_addr, uint64_t M, uint32_t K,
-                                      uint32_t BLOCK_M, uint32_t BLOCK_K) {
+static CUtensorMap make_tma_descriptor_fp4_A(void *global_addr, uint64_t M,
+                                             uint32_t K, uint32_t BLOCK_M,
+                                             uint32_t BLOCK_K) {
     CUtensorMap tma_desc;
     uint64_t globalDim[2] = {K / 2, M};
     uint64_t globalStrides[1] = {K / 2};
@@ -203,8 +197,8 @@ CUtensorMap make_tma_descriptor_fp4_A(void *global_addr, uint64_t M, uint32_t K,
     // constexpr int SWIZZLE_SIZE = 128;
     // uint64_t globalDim[3] = {SWIZZLE_SIZE, M, (K / 2) / SWIZZLE_SIZE};
     // uint64_t globalStrides[2] = {K / 2, SWIZZLE_SIZE};
-    // uint32_t boxDim[3] = {SWIZZLE_SIZE, BLOCK_M, (BLOCK_K / 2) / SWIZZLE_SIZE};
-    // uint32_t elementStrides[3] = {1, 1, 1};
+    // uint32_t boxDim[3] = {SWIZZLE_SIZE, BLOCK_M, (BLOCK_K / 2) /
+    // SWIZZLE_SIZE}; uint32_t elementStrides[3] = {1, 1, 1};
     // cuTensorMapEncodeTiled(
     //     &tma_desc, CU_TENSOR_MAP_DATA_TYPE_UINT8, 3, global_addr, globalDim,
     //     globalStrides, boxDim, elementStrides, CU_TENSOR_MAP_INTERLEAVE_NONE,
@@ -213,8 +207,9 @@ CUtensorMap make_tma_descriptor_fp4_A(void *global_addr, uint64_t M, uint32_t K,
     return tma_desc;
 }
 
-CUtensorMap make_tma_descriptor_fp4_B(void *global_addr, uint64_t N,
-                                      uint64_t K, uint32_t BLOCK_K, uint32_t BLOCK_N) {
+static CUtensorMap make_tma_descriptor_fp4_B(void *global_addr, uint64_t N,
+                                             uint64_t K, uint32_t BLOCK_N,
+                                             uint32_t BLOCK_K) {
     CUtensorMap tma_desc;
     uint64_t globalDim[2] = {K / 2, N};
     uint64_t globalStrides[1] = {K / 2};
@@ -229,8 +224,8 @@ CUtensorMap make_tma_descriptor_fp4_B(void *global_addr, uint64_t N,
     // constexpr int SWIZZLE_SIZE = 128;
     // uint64_t globalDim[3] = {SWIZZLE_SIZE, N, (K / 2) / SWIZZLE_SIZE};
     // uint64_t globalStrides[2] = {K / 2, SWIZZLE_SIZE};
-    // uint32_t boxDim[3] = {SWIZZLE_SIZE, BLOCK_N, (BLOCK_K / 2) / SWIZZLE_SIZE};
-    // uint32_t elementStrides[3] = {1, 1, 1};
+    // uint32_t boxDim[3] = {SWIZZLE_SIZE, BLOCK_N, (BLOCK_K / 2) /
+    // SWIZZLE_SIZE}; uint32_t elementStrides[3] = {1, 1, 1};
     // cuTensorMapEncodeTiled(
     //     &tma_desc, CU_TENSOR_MAP_DATA_TYPE_UINT8, 3, global_addr, globalDim,
     //     globalStrides, boxDim, elementStrides, CU_TENSOR_MAP_INTERLEAVE_NONE,
@@ -239,19 +234,27 @@ CUtensorMap make_tma_descriptor_fp4_B(void *global_addr, uint64_t N,
     return tma_desc;
 }
 
-void matmul_nvfp4_v3(fp16* c, const uint8_t *sfa, const uint8_t* sfb, const uint8_t* a, const uint8_t* b, int M, int N, int K) {
+void matmul_nvfp4_v3(fp16 *c, const uint8_t *sfa, const uint8_t *sfb,
+                     const uint8_t *a, const uint8_t *b, int M, int N, int K) {
     constexpr int BLOCK_M = 128;
     constexpr int BLOCK_N = 256;
-    constexpr int BLOCK_K = 256;
-    constexpr int NUM_STAGES = 4;
+
     dim3 grid(M / BLOCK_M, N / BLOCK_N);
     dim3 block(32 * 8);
-
-    CUtensorMap tmap_A = make_tma_descriptor_fp4_A((void *)a, K, M, BLOCK_K, BLOCK_M);
-    CUtensorMap tmap_B = make_tma_descriptor_fp4_B((void *)b, N, K, BLOCK_K, BLOCK_N);
-    
-    
-    _matmul_nvfp4_v3<BLOCK_M, BLOCK_N, BLOCK_K, NUM_STAGES>
-        <<<grid, block>>>(tmap_A, tmap_B, sfa, sfb, c, M, N, K);
+    if (K == 256) {
+        CUtensorMap tmap_A =
+            make_tma_descriptor_fp4_A((void *)a, M, K, BLOCK_M, 256);
+        CUtensorMap tmap_B =
+            make_tma_descriptor_fp4_B((void *)b, N, K, BLOCK_N, 256);
+        _matmul_nvfp4_v3<BLOCK_M, BLOCK_N, 256, 4>
+            <<<grid, block>>>(tmap_A, tmap_B, sfa, sfb, c, M, N, K);
+    } else {
+        CUtensorMap tmap_A =
+            make_tma_descriptor_fp4_A((void *)a, M, K, BLOCK_M, 512);
+        CUtensorMap tmap_B =
+            make_tma_descriptor_fp4_B((void *)b, N, K, BLOCK_N, 512);
+        _matmul_nvfp4_v3<BLOCK_M, BLOCK_N, 512, 2>
+            <<<grid, block>>>(tmap_A, tmap_B, sfa, sfb, c, M, N, K);
+    }
     cudaDeviceSynchronize();
 }

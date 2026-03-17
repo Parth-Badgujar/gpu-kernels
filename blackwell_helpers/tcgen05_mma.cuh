@@ -21,7 +21,7 @@ make_idesc_mxf4nvf4(uint32_t MMA_M, uint32_t MMA_N, uint32_t transpose_a = 0,
            | (0U << 31); // bit 31:     K dim = 0 (Dense K=64)
 }
 
-__device__ inline uint64_t make_smem_descriptor(uint32_t smem_addr,
+__device__ __forceinline__ uint64_t make_smem_descriptor(uint32_t smem_addr,
                                                 uint32_t sbo, uint32_t lbo = 16,
                                                 uint8_t swizzle_mode = 0) {
     uint64_t desc = 0;
@@ -51,7 +51,7 @@ tcgen05_mma_mxf4nvf4_4x(uint32_t d_tmem, uint64_t a_desc, uint64_t b_desc,
                  : "memory");
 }
 
-__device__ void tcgen_commit_arrive_one(uint32_t mbar) {
+__device__ __forceinline__ void tcgen_commit_arrive_one(uint32_t mbar) {
     asm volatile("tcgen05.commit.cta_group::1.mbarrier::arrive::one.shared::"
                  "cluster.b64 [%0];" ::"r"(mbar)
                  : "memory");

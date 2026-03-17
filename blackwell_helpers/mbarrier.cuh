@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 
-__device__ inline void mbarrier_wait(uint32_t mbar_addr, uint32_t phase) {
+__device__ __forceinline__ void mbarrier_wait(uint32_t mbar_addr, uint32_t phase) {
     uint32_t ticks = 0x989680; // this is optional
     asm volatile("{\n\t"
                  ".reg .pred P1;\n\t"

@@ -11,15 +11,14 @@
 #include <cuda_fp8.h>
 #include <cuda_runtime.h>
 
-using fp4 = __nv_fp4_e2m1;
+
 using fp16 = __half;
 
-template <int BLOCK_M, int BLOCK_N, int NUM_STAGES>
+template <int BLOCK_M, int BLOCK_N, int BLOCK_K, int NUM_STAGES>
 __global__ void _matmul_nvfp4_v2(const __grid_constant__ CUtensorMap tmap_A,
                               const __grid_constant__ CUtensorMap tmap_B,
                               const uint8_t *d_a_scale, const uint8_t *d_b_scale,
                               fp16 *d_c_mat, int M, int N, int K) {
-    constexpr int BLOCK_K = 256;
     constexpr int SFA_SIZE = BLOCK_M * BLOCK_K / 16;
     constexpr int SFB_SIZE = BLOCK_N * BLOCK_K / 16;
     constexpr int A_SIZE = BLOCK_M * BLOCK_K / 2;
@@ -181,7 +180,7 @@ __global__ void _matmul_nvfp4_v2(const __grid_constant__ CUtensorMap tmap_A,
         tcgen_delloc(tmem[0], 512);
 }
 
-CUtensorMap make_tma_descriptor_fp4_A(void *global_addr, uint64_t M,
+static CUtensorMap make_tma_descriptor_fp4_A(void *global_addr, uint64_t M,
                                       uint64_t K) {
     CUtensorMap tma_desc;
     uint64_t globalDim[2] = {K / 2, M};
@@ -196,7 +195,7 @@ CUtensorMap make_tma_descriptor_fp4_A(void *global_addr, uint64_t M,
     return tma_desc;
 }
 
-CUtensorMap make_tma_descriptor_fp4_B(void *global_addr, uint64_t N,
+static CUtensorMap make_tma_descriptor_fp4_B(void *global_addr, uint64_t N,
                                       uint64_t K) {
     CUtensorMap tma_desc;
     uint64_t globalDim[2] = {K / 2, N};
@@ -219,11 +218,10 @@ void matmul_nvfp4_v2(fp16* c, const uint8_t *sfa, const uint8_t* sfb, const uint
     dim3 grid(M / BLOCK_M, N / BLOCK_N);
     dim3 block(32 * 4);
 
-    CUtensorMap tmap_A = make_tma_descriptor_fp4_A((void *)a, K, M);
+    CUtensorMap tmap_A = make_tma_descriptor_fp4_A((void *)a, M, K);
     CUtensorMap tmap_B = make_tma_descriptor_fp4_B((void *)b, N, K);
     
-    
-    _matmul_nvfp4_v2<BLOCK_M, BLOCK_N, NUM_STAGES>
+    _matmul_nvfp4_v2<BLOCK_M, BLOCK_N, BLOCK_K, NUM_STAGES>
         <<<grid, block>>>(tmap_A, tmap_B, sfa, sfb, c, M, N, K);
     cudaDeviceSynchronize();
 }
