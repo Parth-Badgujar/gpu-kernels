@@ -22,6 +22,7 @@ add_executable(nvfp4_gemm
     nvfp4_v2.cu
     nvfp4_v3.cu
     nvfp4_v4.cu
+    nvfp4_v5.cu
     runner.cu
 )
 target_link_libraries(nvfp4_gemm PRIVATE cuda)
