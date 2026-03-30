@@ -5,7 +5,7 @@
 #include <thrust/functional.h>
 #include <thrust/random.h>
 #include <iostream>
-#include "src/utils.h"
+#include "../include/others.h"
 #include <stdlib.h>
 #include <cooperative_groups.h>
 #include <kernels.h>
@@ -130,12 +130,6 @@ bench_result_t benchmark_ex(
     return {avg_ms, flops, gflops_per_s};
 }
 
-#include <thrust/host_vector.h>
-#include <thrust/device_vector.h>
-#include <thrust/generate.h>
-#include <thrust/random.h>
-#include <cuda_bf16.h>   // __nv_bfloat16, __float2bfloat16_rn, __bfloat162float
-
 using bf16 = __nv_bfloat16;
 
 // assume: kernel takes bf16 pointers now
@@ -177,26 +171,6 @@ int test_kernel_once(kernel_t kernel, size_t B, size_t H, size_t N, size_t D){
 
     return check_output(o_f, o_h, T);
 }
-
-// int test_kernel_once(kernel_t kernel, size_t B, size_t H, size_t N, size_t D){
-//     size_t T = B * H * N * D;
-
-//     thrust::uniform_real_distribution<float> dist(-5.0, 8.0);
-//     thrust::default_random_engine rng(69);
-
-//     thrust::host_vector<float> q_h(T), k_h(T), v_h(T), o_h(T);
-//     thrust::generate(q_h.begin(), q_h.end(), [&]{ return dist(rng); });
-//     thrust::generate(k_h.begin(), k_h.end(), [&]{ return dist(rng); });
-//     thrust::generate(v_h.begin(), v_h.end(), [&]{ return dist(rng); });
-//     // thrust::generate(o_h.begin(), o_h.end(), [&]{ return dist(rng); });
-
-//     thrust::device_vector<float> q_d = q_h, k_d = k_h, v_d = v_h, o_d = o_h;
-
-//     attention_cpu(q_h.data(), k_h.data(), v_h.data(), o_h.data(), B, H, N, D);
-//     kernel(q_d.data().get(), k_d.data().get(), v_d.data().get(), o_d.data().get(), B, H, N, D);
-
-//     return check_output(o_d, o_h, T);
-// }
 
 void test_kernels_all(
     const std::vector<std::pair<const char*, kernel_t>>& kernels,

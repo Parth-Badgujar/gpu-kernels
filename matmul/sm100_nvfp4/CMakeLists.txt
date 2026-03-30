@@ -23,6 +23,8 @@ add_executable(nvfp4_gemm
     nvfp4_v3.cu
     nvfp4_v4.cu
     nvfp4_v5.cu
+    nvfp4_gau_nernst.cu
     runner.cu
 )
+target_compile_options(nvfp4_gemm PRIVATE "-O3" "--use_fast_math" "--expt-relaxed-constexpr")
 target_link_libraries(nvfp4_gemm PRIVATE cuda)

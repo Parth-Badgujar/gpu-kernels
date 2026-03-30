@@ -1,9 +1,9 @@
-#include "../../blackwell_helpers/fence.cuh"
-#include "../../blackwell_helpers/mbarrier.cuh"
-#include "../../blackwell_helpers/others.cuh"
-#include "../../blackwell_helpers/tcgen05_mma.cuh"
-#include "../../blackwell_helpers/tcgen05_mov.cuh"
-#include "../../blackwell_helpers/tma.cuh"
+#include "../../include/fence.cuh"
+#include "../../include/mbarrier.cuh"
+#include "../../include/others.cuh"
+#include "../../include/tcgen05_mma.cuh"
+#include "../../include/tcgen05_mov.cuh"
+#include "../../include/tma.cuh"
 #include <cstdint>
 #include <cuda.h>
 #include <cuda_bf16.h>
@@ -11,14 +11,14 @@
 #include <cuda_fp8.h>
 #include <cuda_runtime.h>
 
-
 using fp16 = __half;
 
 template <int BLOCK_M, int BLOCK_N, int BLOCK_K, int NUM_STAGES>
 __global__ void _matmul_nvfp4_v2(const __grid_constant__ CUtensorMap tmap_A,
-                              const __grid_constant__ CUtensorMap tmap_B,
-                              const uint8_t *d_a_scale, const uint8_t *d_b_scale,
-                              fp16 *d_c_mat, int M, int N, int K) {
+                                 const __grid_constant__ CUtensorMap tmap_B,
+                                 const uint8_t *d_a_scale,
+                                 const uint8_t *d_b_scale, fp16 *d_c_mat, int M,
+                                 int N, int K) {
     constexpr int SFA_SIZE = BLOCK_M * BLOCK_K / 16;
     constexpr int SFB_SIZE = BLOCK_N * BLOCK_K / 16;
     constexpr int A_SIZE = BLOCK_M * BLOCK_K / 2;
@@ -129,7 +129,8 @@ __global__ void _matmul_nvfp4_v2(const __grid_constant__ CUtensorMap tmap_A,
             for (int j = 0; j < 64; j++)
                 out[j] = __float22half2_rn({tmp[j * 2], tmp[j * 2 + 1]});
             for (int j = 0; j < 8; j++)
-                store256(d_c_mat_block + i * 128 + j * 16 + threadIdx.x * N, (uint32_t*)(&out[8 * j]));
+                store256(d_c_mat_block + i * 128 + j * 16 + threadIdx.x * N,
+                         (uint32_t *)(&out[8 * j]));
         }
     };
 
@@ -181,7 +182,7 @@ __global__ void _matmul_nvfp4_v2(const __grid_constant__ CUtensorMap tmap_A,
 }
 
 static CUtensorMap make_tma_descriptor_fp4_A(void *global_addr, uint64_t M,
-                                      uint64_t K) {
+                                             uint64_t K) {
     CUtensorMap tma_desc;
     uint64_t globalDim[2] = {K / 2, M};
     uint64_t globalStrides[1] = {K / 2};
@@ -196,7 +197,7 @@ static CUtensorMap make_tma_descriptor_fp4_A(void *global_addr, uint64_t M,
 }
 
 static CUtensorMap make_tma_descriptor_fp4_B(void *global_addr, uint64_t N,
-                                      uint64_t K) {
+                                             uint64_t K) {
     CUtensorMap tma_desc;
     uint64_t globalDim[2] = {K / 2, N};
     uint64_t globalStrides[1] = {K / 2};
@@ -210,7 +211,8 @@ static CUtensorMap make_tma_descriptor_fp4_B(void *global_addr, uint64_t N,
     return tma_desc;
 }
 
-void matmul_nvfp4_v2(fp16* c, const uint8_t *sfa, const uint8_t* sfb, const uint8_t* a, const uint8_t* b, int M, int N, int K) {
+void matmul_nvfp4_v2(fp16 *c, const uint8_t *sfa, const uint8_t *sfb,
+                     const uint8_t *a, const uint8_t *b, int M, int N, int K) {
     constexpr int BLOCK_M = 128;
     constexpr int BLOCK_N = 256;
     constexpr int BLOCK_K = 256;
@@ -220,8 +222,7 @@ void matmul_nvfp4_v2(fp16* c, const uint8_t *sfa, const uint8_t* sfb, const uint
 
     CUtensorMap tmap_A = make_tma_descriptor_fp4_A((void *)a, M, K);
     CUtensorMap tmap_B = make_tma_descriptor_fp4_B((void *)b, N, K);
-    
+
     _matmul_nvfp4_v2<BLOCK_M, BLOCK_N, BLOCK_K, NUM_STAGES>
         <<<grid, block>>>(tmap_A, tmap_B, sfa, sfb, c, M, N, K);
-    cudaDeviceSynchronize();
 }

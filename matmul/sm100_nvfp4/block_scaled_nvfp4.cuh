@@ -14,3 +14,5 @@ void matmul_nvfp4_v4(fp16 *c, const uint8_t *sfa, const uint8_t *sfb,
                      const uint8_t *a, const uint8_t *b, int M, int N, int K);
 void matmul_nvfp4_v5(fp16 *c, const uint8_t *sfa, const uint8_t *sfb,
                      const uint8_t *a, const uint8_t *b, int M, int N, int K);
+void matmul_nvfp4_gn(fp16 *c, const uint8_t *sfa, const uint8_t *sfb,
+                     const uint8_t *a, const uint8_t *b, int M, int N, int K);

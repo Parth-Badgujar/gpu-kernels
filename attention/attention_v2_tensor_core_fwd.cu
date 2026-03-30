@@ -1,6 +1,8 @@
 #include <cuda_runtime.h>
 #include <cuda.h>
-#include "utils.h"
+#include "../include/others.cuh"
+#include "../include/mma_sync.cuh"
+#include "../include/ldmatrix.cuh"
 #include <cuda_fp16.h>
 #include <stdint.h>
 #include <cuda_bf16.h>
@@ -8,46 +10,9 @@
 typedef unsigned int uint;
 typedef nv_bfloat16 bf16;
 
-__device__ inline
-void ldmatrix_x4_trans(uint32_t regs[4], uint32_t addr) {
-  asm volatile("ldmatrix.sync.aligned.m8n8.x4.trans.b16 {%0, %1, %2, %3}, [%4];"
-              : "=r"(regs[0]), "=r"(regs[1]), "=r"(regs[2]), "=r"(regs[3])
-              : "r"(addr));
-}
 
-__device__ inline
-void ldmatrix_x4(uint32_t regs[4], uint32_t addr) {
-  asm volatile("ldmatrix.sync.aligned.m8n8.x4.b16 {%0, %1, %2, %3}, [%4];"
-              : "=r"(regs[0]), "=r"(regs[1]), "=r"(regs[2]), "=r"(regs[3])
-              : "r"(addr));
-}
 
-__device__ inline
-void ldmatrix_x2(uint32_t regs[2], uint32_t addr) {
-  asm volatile("ldmatrix.sync.aligned.m8n8.x2.b16 {%0, %1}, [%2];"
-              : "=r"(regs[0]), "=r"(regs[1])
-              : "r"(addr));
-}
 
-__device__ inline
-void ldmatrix_x2_trans(uint32_t regs[2], uint32_t addr) {
-  asm volatile("ldmatrix.sync.aligned.m8n8.x2.trans.b16 {%0, %1}, [%2];"
-              : "=r"(regs[0]), "=r"(regs[1])
-              : "r"(addr));
-}
-
-__device__ inline
-void mma_m16n8k16(uint32_t A[4], uint32_t B[2], float D[4]) {
-  asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32 "
-              "{%0, %1, %2, %3}, "
-              "{%4, %5, %6, %7}, "
-              "{%8, %9}, "
-              "{%10, %11, %12, %13};"
-              : "=f"(D[0]), "=f"(D[1]), "=f"(D[2]), "=f"(D[3])
-              : "r"(A[0]), "r"(A[1]), "r"(A[2]), "r"(A[3]),
-                "r"(B[0]), "r"(B[1]),
-                "f"(D[0]), "f"(D[1]), "f"(D[2]), "f"(D[3]));
-}
 
 template<int BLOCK_K, int DIM, int THREAD_BLOCK_SIZE>
 __device__ __forceinline__
@@ -152,7 +117,7 @@ __global__ void _flash_attention_simple_v2_fwd(
             int row_offset = (row * MMA_M) + lane_id % 16;
             int col_offset = (col * MMA_K) + (lane_id / 16) * 8 / 2;
             uint32_t q_smem_ptr = __cvta_generic_to_shared(Q_warp + (row_offset * DIM)/2 + col_offset);
-            ldmatrix_x4(Q_rmem[row][col], q_smem_ptr);
+            ldmatrix_m8n8_x4_b16(Q_rmem[row][col], q_smem_ptr);
         }
     }
     
@@ -180,7 +145,7 @@ __global__ void _flash_attention_simple_v2_fwd(
                 int row_offset = (row * MMA_N) + lane_id % 8;
                 int col_offset = (col * MMA_K) + (lane_id / 8) * 8 / 2;
                 uint32_t k_smem_ptr = __cvta_generic_to_shared(K_smem + (row_offset * DIM)/2 + col_offset);
-                ldmatrix_x4(K_rmem[row][col], k_smem_ptr);    
+                ldmatrix_m8n8_x4_b16(K_rmem[row][col], k_smem_ptr);    
             }
         }
 
@@ -189,7 +154,7 @@ __global__ void _flash_attention_simple_v2_fwd(
         for(int mma_q = 0; mma_q < WARP_Q / MMA_M; mma_q++){
             for(int mma_k = 0; mma_k < BLOCK_KV / MMA_N; mma_k++){
                 for(int mma_dim = 0; mma_dim < DIM / MMA_K; mma_dim++){
-                    mma_m16n8k16(
+                    mma_m16n8k16_row_col_f32_bf16_bf16_f32(
                         Q_rmem[mma_q][mma_dim],
                         K_rmem[mma_k][mma_dim],
                         S_rmem[mma_q][mma_k]
@@ -277,7 +242,7 @@ __global__ void _flash_attention_simple_v2_fwd(
                 int row_offset = (row * MMA_M) + lane_id % 16;
                 int col_offset = ((col * MMA_K) + (lane_id / 16) * 8) / 2;
                 uint32_t v_smem_ptr = __cvta_generic_to_shared(V_warp + (row_offset * DIM)/2 + col_offset);
-                ldmatrix_x2_trans(V_rmem[row][col], v_smem_ptr);
+                ldmatrix_m8n8_x2_trans_b16(V_rmem[row][col], v_smem_ptr);
             }
         }
 
@@ -289,7 +254,7 @@ __global__ void _flash_attention_simple_v2_fwd(
         for(int mma_q = 0; mma_q < WARP_Q / MMA_M; mma_q++){
             for(int mma_d = 0; mma_d < DIM / MMA_K; mma_d++){
                 for(int mma_v = 0; mma_v < BLOCK_KV / MMA_N; mma_v++){
-                    mma_m16n8k16(
+                    mma_m16n8k16_row_col_f32_bf16_bf16_f32(
                         P_rmem[mma_q][mma_v],
                         V_rmem[mma_v][mma_d],
                         O_rmem[mma_q][mma_d]

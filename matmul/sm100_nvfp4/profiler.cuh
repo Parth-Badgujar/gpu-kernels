@@ -31,7 +31,7 @@ __device__ __forceinline__ uint64_t globaltimer() {
     return t;
 }
 
-enum class ProfilerTag {
+enum class ProfilerTag{
     TMA_LOAD,
     COMPUTE,
     STORE_C,

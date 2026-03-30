@@ -50,7 +50,7 @@ def _flash_attention_v2(
     l_i = tl.zeros((BLOCK_Q,), tl.float32)
     o_i = tl.zeros((BLOCK_Q, DIM), tl.float32)
     
-    for kv_start in tl.range(0, kv_len, BLOCK_KV, num_stages = 2):
+    for kv_start in tl.range(0, kv_len, BLOCK_KV):
         kv_idx  = kv_start + tl.arange(0, BLOCK_KV)
         kv_mask = kv_idx < kv_len
 
@@ -67,9 +67,9 @@ def _flash_attention_v2(
         m_new = tl.maximum(m_i, m_block)
         alpha = tl.exp(m_i - m_new)
 
-        P = tl.exp(S - m_new[:, None]) * q_mask[:, None] 
-        P = P.to(tl.bfloat16)
+        P = tl.exp(S - m_new[:, None]) * q_mask[:, None]
         l_i = alpha * l_i + tl.sum(P, axis=1)
+        P = P.to(tl.bfloat16)
         o_i = alpha[:, None] * o_i + tl.dot(P, v_block)
         m_i = m_new
 
@@ -91,7 +91,7 @@ if __name__ == "__main__":
     q = torch.randn(B, H, N, D, dtype = torch.bfloat16, device = "cuda")
     k = torch.randn(B, H, N, D, dtype = torch.bfloat16, device = "cuda")
     v = torch.randn(B, H, N, D, dtype = torch.bfloat16, device = "cuda")
-    sdpa_time   = triton.testing.do_bench(lambda : F.scaled_dot_product_attention(q, k, v), warmup = 10, rep = 1000)
-    triton_time = triton.testing.do_bench(lambda : flash_attention_v2_triton(q, k, v), warmup = 10, rep = 1000)
+    sdpa_time   = triton.testing.do_bench(lambda : F.scaled_dot_product_attention(q, k, v), warmup = 500, rep = 100)
+    triton_time = triton.testing.do_bench(lambda : flash_attention_v2_triton(q, k, v), warmup = 500, rep = 100)
     print("SDPA time : ", sdpa_time)
     print("Triton time : ", triton_time)

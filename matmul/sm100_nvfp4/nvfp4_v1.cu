@@ -1,9 +1,9 @@
-#include "../../blackwell_helpers/fence.cuh"
-#include "../../blackwell_helpers/mbarrier.cuh"
-#include "../../blackwell_helpers/others.cuh"
-#include "../../blackwell_helpers/tcgen05_mma.cuh"
-#include "../../blackwell_helpers/tcgen05_mov.cuh"
-#include "../../blackwell_helpers/tma.cuh"
+#include "../../include/fence.cuh"
+#include "../../include/mbarrier.cuh"
+#include "../../include/others.cuh"
+#include "../../include/tcgen05_mma.cuh"
+#include "../../include/tcgen05_mov.cuh"
+#include "../../include/tma.cuh"
 #include <cassert>
 #include <cstdint>
 #include <cuda.h>
@@ -168,5 +168,4 @@ void matmul_nvfp4_v1(fp16 *c, const uint8_t *sfa, const uint8_t *sfb,
     int stride_cn = 1;
     _matmul_nvfp4_v1<BLOCK_M, BLOCK_N, BLOCK_K><<<grid, block>>>(
         tmap_A, tmap_B, tmap_sfA, tmap_sfB, stride_cm, stride_cn, c);
-    cudaDeviceSynchronize();
 }

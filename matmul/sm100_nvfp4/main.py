@@ -55,7 +55,7 @@ image = (
 vol = modal.Volume.from_name("blackwell-volume", create_if_missing=True)
 
 def compile_locally():
-    os.system("cmake -S . -B build")
+    os.system("cmake -S . -B build -G Ninja")
     os.system("cmake --build build")
 
 def verify_output(filename, atol, rtol):
@@ -84,6 +84,7 @@ class BlackwellRunner():
         print("Verify")
         
         print("v5 : ", verify_output("c_out_v5.bin", 1e-3, 1e-3))
+        print("gn : ", verify_output("c_out_gn.bin", 1e-3, 1e-3))
         # print("v4 : ", verify_output("c_out_v4.bin", 1e-3, 1e-3))
         # print("v3 : ", verify_output("c_out_v3.bin", 1e-3, 1e-3))
         # print("v2 : ", verify_output("c_out_v2.bin", 1e-3, 1e-3))
@@ -114,12 +115,12 @@ class BlackwellRunner():
 @app.local_entrypoint()
 def main():
     mnk = [
-        # (1024, 1024, 1024),
-        # (1024, 1024, 2048),
-        # (1024, 1024, 4096),
-        # (2048, 2048, 2048),
-        # (2048, 2048, 4096),
-        # (2048, 2048, 8192),
+        (1024, 1024, 1024),
+        (1024, 1024, 2048),
+        (1024, 1024, 4096),
+        (2048, 2048, 2048),
+        (2048, 2048, 4096),
+        (2048, 2048, 8192),
         (4096, 4096, 4096),
         (4096, 4096, 8192),
         (4096, 4096, 16384),
@@ -135,12 +136,13 @@ def main():
         print("M = {} N = {} K = {}".format(M, N, K))
         runner.run_ref.remote(M, N, K, bench = False)
         runner.run_verify.remote(M, N, K)
-        cuda_time_v5, cuda_time_v4, cuda_time_v3, cuda_time_v2 = runner.run_benchmark.remote(M, N, K)
+        cuda_time_v5, cuda_time_v4, cuda_time_v3, cuda_time_v2, cuda_time_gn = runner.run_benchmark.remote(M, N, K)
         torch_time = runner.run_ref.remote(M, N, K, bench = True)
         print("Torch (TFLOPS):", 2 * M * N * K / (1e9 * torch_time))
         print("CUDA v5 (TFLOPS):", 2 * M * N * K / (1e9 * cuda_time_v5))
         print("CUDA v4 (TFLOPS):", 2 * M * N * K / (1e9 * cuda_time_v4))
         print("CUDA v3 (TFLOPS):", 2 * M * N * K / (1e9 * cuda_time_v3))
         print("CUDA v2 (TFLOPS):", 2 * M * N * K / (1e9 * cuda_time_v2))
+        print("CUDA Gau Nernst (TFLOPS):", 2 * M * N * K / (1e9 * cuda_time_gn))
         print("---------------------------------------")
         

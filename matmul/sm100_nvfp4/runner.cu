@@ -59,7 +59,7 @@ int main(int argc, char *argv[]) {
     const thrust::device_vector<uint8_t> d_b = b;
 
     auto run_bench = [&](auto func) {
-        int warmup = 10;
+        int warmup = 500;
         int rep = 100;
         CUDAtimer timer;
         for (int i = 0; i < warmup; i++) {
@@ -84,15 +84,17 @@ int main(int argc, char *argv[]) {
 
     if (mode == "verify") {
         run_verify(matmul_nvfp4_v5, "c_out_v5.bin");
-        // run_verify(matmul_nvfp4_v4, "c_out_v4.bin");
-        // run_verify(matmul_nvfp4_v3, "c_out_v3.bin");
-        // run_verify(matmul_nvfp4_v2, "c_out_v2.bin");
+        run_verify(matmul_nvfp4_v4, "c_out_v4.bin");
+        run_verify(matmul_nvfp4_v3, "c_out_v3.bin");
+        run_verify(matmul_nvfp4_v2, "c_out_v2.bin");
+        run_verify(matmul_nvfp4_gn, "c_out_gn.bin");
     } else if (mode == "benchmark") {
         float t1 = run_bench(matmul_nvfp4_v5);
         float t2 = run_bench(matmul_nvfp4_v4);
         float t3 = run_bench(matmul_nvfp4_v3);
         float t4 = run_bench(matmul_nvfp4_v2);
-        std::cout << t1 << " " << t2 << " " << t3 << " " << t4 << "\n";
+        float t5 = run_bench(matmul_nvfp4_gn);
+        std::cout << t1 << " " << t2 << " " << t3 << " " << t4 << " " << t5 << "\n";
     } else {
         std::cerr << "Invalid mode" << std::endl;
         return 1;
