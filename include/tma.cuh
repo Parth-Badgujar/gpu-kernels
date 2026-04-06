@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 
-__device__ __forceinline__ void tma_load_flat(int dst, const void *src,
+__device__ __forceinline__ void tma_load_flat(uint32_t dst, const void *src,
                                               int size, int mbar_addr,
                                               uint64_t cache_policy) {
     asm volatile("cp.async.bulk.shared::cta.global.mbarrier::complete_tx::"
@@ -9,7 +9,15 @@ __device__ __forceinline__ void tma_load_flat(int dst, const void *src,
                  "l"(src), "r"(size), "r"(mbar_addr), "l"(cache_policy));
 }
 
-__device__ __forceinline__ void tma_load_2d(int dst, const void *tmap_ptr,
+__device__ __forceinline__ void tma_load_1d(uint32_t dst, const void *tmap_ptr,
+                                            int mbar_addr, int x) {
+    asm volatile("cp.async.bulk.tensor.1d.shared::cta.global.mbarrier::"
+                 "complete_tx::bytes [%0], [%1, {%2}], [%3];" ::"r"(dst),
+                 "l"(tmap_ptr), "r"(x), "r"(mbar_addr)
+                 : "memory");
+}
+
+__device__ __forceinline__ void tma_load_2d(uint32_t dst, const void *tmap_ptr,
                                             int mbar_addr, int x, int y) {
     asm volatile("cp.async.bulk.tensor.2d.shared::cta.global.mbarrier::"
                  "complete_tx::bytes [%0], [%1, {%2, %3}], [%4];" ::"r"(dst),
@@ -18,7 +26,7 @@ __device__ __forceinline__ void tma_load_2d(int dst, const void *tmap_ptr,
 }
 
 __device__ __forceinline__ void
-tma_load_3d(int dst, const void *tmap_ptr, int mbar_addr, int x, int y, int z) {
+tma_load_3d(uint32_t dst, const void *tmap_ptr, int mbar_addr, int x, int y, int z) {
     asm volatile(
         "cp.async.bulk.tensor.3d.shared::cta.global.mbarrier::complete_tx::"
         "bytes [%0], [%1, {%2, %3, %4}], [%5];" ::"r"(dst),
@@ -26,7 +34,7 @@ tma_load_3d(int dst, const void *tmap_ptr, int mbar_addr, int x, int y, int z) {
         : "memory");
 }
 
-__device__ __forceinline__ void tma_load_4d(int dst, const void *tmap_ptr,
+__device__ __forceinline__ void tma_load_4d(uint32_t dst, const void *tmap_ptr,
                                             int mbar_addr, int x, int y, int z,
                                             int w) {
     asm volatile(
@@ -36,7 +44,7 @@ __device__ __forceinline__ void tma_load_4d(int dst, const void *tmap_ptr,
         : "memory");
 }
 
-__device__ __forceinline__ void tma_load_5d(int dst, const void *tmap_ptr,
+__device__ __forceinline__ void tma_load_5d(uint32_t dst, const void *tmap_ptr,
                                             int mbar_addr, int x, int y, int z,
                                             int w, int v) {
     asm volatile(

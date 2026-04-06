@@ -1,6 +1,11 @@
 #pragma once
 #include <cstdint>
 
+
+__device__ __forceinline__ void fence_mbarrier_init(){
+    asm volatile("fence.mbarrier_init.release.cluster;" ::: "memory");
+}
+
 __device__ __forceinline__ void mbarrier_wait(uint32_t mbar_addr, uint32_t phase) {
     uint32_t ticks = 0x989680; // this is optional
     asm volatile("{\n\t"
@@ -60,6 +65,12 @@ __device__ __forceinline__ void mbarrier_init(uint32_t mbar_ptr,
 __device__ __forceinline__ void mbarrier_arrive(uint32_t mbar_ptr) {
     asm volatile(
         "mbarrier.arrive.release.cta.shared::cta.b64 _, [%0];" ::"r"(mbar_ptr)
+        : "memory");
+}
+
+__device__ __forceinline__ void mbarrier_arrive_count(uint32_t mbar_ptr, uint32_t count) {
+    asm volatile(
+        "mbarrier.arrive.release.cta.shared::cta.b64 _, [%0], %1;" ::"r"(mbar_ptr), "r"(count)
         : "memory");
 }
 

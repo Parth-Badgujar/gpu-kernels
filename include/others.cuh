@@ -253,3 +253,11 @@ void load256(void* ptr, uint32_t* src)
         : "memory"
     );
 }
+
+template <int B, int M, int S>
+__device__ __forceinline__ uint32_t swizzle(uint32_t addr) {
+    constexpr uint32_t bit_msk = (1 << B) - 1; 
+    constexpr uint32_t yyy_msk = bit_msk << (M + S); 
+    uint32_t shift_val = (addr & yyy_msk) >> S;
+    return addr ^ shift_val;
+}

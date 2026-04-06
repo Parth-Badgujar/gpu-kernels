@@ -8,11 +8,13 @@ void mma_m16n8k64_mxf4nvf4_4x_ue4m3(
     uint32_t b[2],
     float    c[4],
     uint32_t sfa,
-    uint32_t sfb)
+    uint32_t sfb,
+    uint16_t bid_a = 0,
+    uint16_t tid_a = 0,
+    uint16_t bid_b = 0,
+    uint16_t tid_b = 0
+)
 {
-    constexpr uint16_t BID_A = 0, TID_A = 0;
-    constexpr uint16_t BID_B = 0, TID_B = 0;
-
     asm volatile(
         "mma.sync.aligned.kind::mxf4nvf4.block_scale.scale_vec::4X"
         ".m16n8k64.row.col.f32.e2m1.e2m1.f32.ue4m3 "
@@ -26,8 +28,8 @@ void mma_m16n8k64_mxf4nvf4_4x_ue4m3(
         :  "r"(a[0]),  "r"(a[1]),  "r"(a[2]),  "r"(a[3]),
            "r"(b[0]),  "r"(b[1]),
            "f"(c[0]),  "f"(c[1]),  "f"(c[2]),  "f"(c[3]),
-           "r"(sfa), "h"(BID_A), "h"(TID_A),
-           "r"(sfb), "h"(BID_B), "h"(TID_B)
+           "r"(sfa), "h"(bid_a), "h"(tid_a),
+           "r"(sfb), "h"(bid_b), "h"(tid_b)
     );
 }
 
