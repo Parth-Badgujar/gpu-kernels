@@ -18,7 +18,7 @@
 #define MMA_N 8
 
 __device__ __forceinline__ int2 get_grid_coords(int bid, int N_BLOCKS){
-    return make_int2(bid % N_BLOCKS, bid / N_BLOCKS);
+    return make_int2(bid / N_BLOCKS, bid % N_BLOCKS);
 }
 
 template<int BLOCK_M = 128, int BLOCK_N = 128, int BLOCK_K = 64, int NUM_STAGES = 1>
@@ -162,7 +162,7 @@ __global__ void _nvfp4_gemm_v5(
         }
     };
 
-    
+
     int N_BLOCKS = N / BLOCK_N;
     int M_BLOCKS = M / BLOCK_M;
     int NUM_BLOCKS = M_BLOCKS * N_BLOCKS;
