@@ -261,3 +261,14 @@ __device__ __forceinline__ uint32_t swizzle(uint32_t addr) {
     uint32_t shift_val = (addr & yyy_msk) >> S;
     return addr ^ shift_val;
 }
+
+
+__device__ __forceinline__
+void streaming_store_f32x2(float* addr, float2 val) {
+    asm volatile(
+        "st.global.cs.v2.f32 [%0], {%1, %2};\n"
+        :
+        : "l"(addr), "f"(val.x), "f"(val.y)
+        : "memory"
+    );
+}

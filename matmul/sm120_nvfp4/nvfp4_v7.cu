@@ -18,20 +18,16 @@
 #define MMA_N 8
 
 __device__ __forceinline__ int2 get_grid_coords(int bid, int M_BLOCKS, int N_BLOCKS) {
-    constexpr int TILE_SIZE = 8; 
+    constexpr int TILE_SIZE = 4; 
     int tiles_per_row = N_BLOCKS / TILE_SIZE;
     int super_tile_id = bid / (TILE_SIZE * TILE_SIZE);
     int local_id = bid % (TILE_SIZE * TILE_SIZE);
-
     int super_tile_row = super_tile_id / tiles_per_row;
     int super_tile_col = super_tile_id % tiles_per_row;
-
     int local_row = local_id / TILE_SIZE;
     int local_col = local_id % TILE_SIZE;
-
     int m_block = super_tile_row * TILE_SIZE + local_row;
     int n_block = super_tile_col * TILE_SIZE + local_col;
-
     if (m_block >= M_BLOCKS || n_block >= N_BLOCKS) {
         m_block = bid % M_BLOCKS;
         n_block = bid / M_BLOCKS;
@@ -40,7 +36,7 @@ __device__ __forceinline__ int2 get_grid_coords(int bid, int M_BLOCKS, int N_BLO
 }
 
 template<int BLOCK_M = 128, int BLOCK_N = 128, int BLOCK_K = 64, int NUM_STAGES = 1>
-__global__ void _nvfp4_gemm_v6(
+__global__ void _nvfp4_gemm_v7(
     const uint8_t* __restrict__ gSFA,
     const uint8_t* __restrict__ gSFB,
     const __grid_constant__ CUtensorMap tmap_A,
@@ -53,7 +49,7 @@ __global__ void _nvfp4_gemm_v6(
     constexpr int sSFA_mem = (BLOCK_M * BLOCK_K / 16);
     constexpr int sSFB_mem = (BLOCK_N * BLOCK_K / 16);
     constexpr int STAGE_SIZE = sA_mem + sB_mem + sSFA_mem + sSFB_mem;
-    constexpr int WARP_M = BLOCK_M / 2;
+    constexpr int WARP_M = BLOCK_M / 4;
     constexpr int WARP_N = BLOCK_N / 2;
     __shared__ alignas(1024) uint8_t  smem[STAGE_SIZE * NUM_STAGES];
     __shared__ alignas(128) uint64_t load_mbar_ptr[NUM_STAGES];
@@ -73,12 +69,12 @@ __global__ void _nvfp4_gemm_v6(
     uint32_t load_mbar = __cvta_generic_to_shared(load_mbar_ptr);
     if (warp_id == 0 && elect_sync()) {
         for(int i = 0; i < NUM_STAGES; i++){
-            mbarrier_init(compute_mbar + i * 8, 32 * 4);
+            mbarrier_init(compute_mbar + i * 8, 32 * 8);
             mbarrier_init(load_mbar + i * 8, 1);
         }
         fence_mbarrier_init();
         for(int i = 0; i < NUM_STAGES; i++)
-            mbarrier_arrive_count(compute_mbar + i * 8, 32 * 4);
+            mbarrier_arrive_count(compute_mbar + i * 8, 32 * 8);
     }
     __syncthreads();
 
@@ -109,7 +105,7 @@ __global__ void _nvfp4_gemm_v6(
         #pragma unroll
         for(int mma_m = 0; mma_m < WARP_M / MMA_M; mma_m += 2){
             int row = quad_id + lane_id_in_quad * 8;
-            int col = wid_x * 2 + (mma_m / 2);
+            int col = wid_x;
             rSFA[reg_phase][mma_m / 2] = sfa_ptr[128 * mma_k + col + row * 4];
         }
         #pragma unroll
@@ -176,7 +172,7 @@ __global__ void _nvfp4_gemm_v6(
     int NUM_BLOCKS = M_BLOCKS * N_BLOCKS;
     int bid = blockIdx.x;
     int stage_id = 0;
-    if (warp_id < 4){
+    if (warp_id < 8){
         int reg_phase = 0;
         while(bid < NUM_BLOCKS){
             int2 coords = get_grid_coords(bid, M_BLOCKS, N_BLOCKS);
@@ -202,7 +198,7 @@ __global__ void _nvfp4_gemm_v6(
             bid += gridDim.x;
         }
     }
-    else if (warp_id == 4){
+    else if (warp_id == 8){
         while(bid < NUM_BLOCKS){
             int2 coords = get_grid_coords(bid, M_BLOCKS, N_BLOCKS);
             int off_m = coords.x * BLOCK_M;
@@ -254,7 +250,7 @@ static CUtensorMap make_tma_descriptor_fp4_B(void *global_addr, uint64_t N,
     return tma_desc;
 }
 
-torch::Tensor nvfp4_gemm_v6(const torch::Tensor& a, const torch::Tensor& b, const torch::Tensor& sfa, const torch::Tensor& sfb){
+torch::Tensor nvfp4_gemm_v7(const torch::Tensor& a, const torch::Tensor& b, const torch::Tensor& sfa, const torch::Tensor& sfb){
     int M = a.size(0);
     int N = b.size(0);
     int K = a.size(1) * 2;
@@ -265,9 +261,9 @@ torch::Tensor nvfp4_gemm_v6(const torch::Tensor& a, const torch::Tensor& b, cons
     constexpr int BLOCK_K = 256;
     constexpr int NUM_STAGES = 2;
     dim3 grid(70, 1, 1);
-    dim3 block(5 * 32, 1, 1);
+    dim3 block(9 * 32, 1, 1);
     CUtensorMap tma_A = make_tma_descriptor_fp4_A(a.view(torch::kUInt8).data_ptr<uint8_t>(), M, K, BLOCK_M, BLOCK_K);
     CUtensorMap tma_B = make_tma_descriptor_fp4_B(b.view(torch::kUInt8).data_ptr<uint8_t>(), N, K, BLOCK_N, BLOCK_K);
-    _nvfp4_gemm_v6<BLOCK_M, BLOCK_N, BLOCK_K, NUM_STAGES><<<grid, block>>>(sfa.view(torch::kUInt8).data_ptr<uint8_t>(), sfb.view(torch::kUInt8).data_ptr<uint8_t>(), tma_A, tma_B, c.data_ptr<float>(), M, N, K);
+    _nvfp4_gemm_v7<BLOCK_M, BLOCK_N, BLOCK_K, NUM_STAGES><<<grid, block>>>(sfa.view(torch::kUInt8).data_ptr<uint8_t>(), sfb.view(torch::kUInt8).data_ptr<uint8_t>(), tma_A, tma_B, c.data_ptr<float>(), M, N, K);
     return c;
 }

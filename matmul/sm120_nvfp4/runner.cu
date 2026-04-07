@@ -78,29 +78,36 @@ float benchmark(auto kernel, int M, int N, int K, int rep = 1000, int warmup = 5
 }
 
 int main(int argc, char* argv[]){
-    // if (argc != 4){
-    //     printf("Usage: %s <M> <N> <K>\n", argv[0]);
-    //     return 1;
-    // }
-    // int M = atoi(argv[1]);
-    // int N = atoi(argv[2]);
-    // int K = atoi(argv[3]);
-    constexpr int M = 16384;
-    constexpr int N = 16384;
-    constexpr int K = 16384;
-    float perf_ref = benchmark(reference_kernel, M, N, K, 1000);
+    if (argc != 4){
+        printf("Usage: %s <M> <N> <K>\n", argv[0]);
+        return 1;
+    }
+    int M = atoi(argv[1]);
+    int N = atoi(argv[2]);
+    int K = atoi(argv[3]);
+    float perf_ref = benchmark(reference_kernel, M, N, K, 100);
+    CUDA_CHECK(cudaDeviceSynchronize());
     sleep(3.0);
-    float perf_v1 = benchmark(nvfp4_gemm_v1, M, N, K, 1000);
+    float perf_v1 = benchmark(nvfp4_gemm_v1, M, N, K, 100);
+    CUDA_CHECK(cudaDeviceSynchronize());
     sleep(3.0);
-    float perf_v2 = benchmark(nvfp4_gemm_v2, M, N, K, 1000);
+    float perf_v2 = benchmark(nvfp4_gemm_v2, M, N, K, 100);
+    CUDA_CHECK(cudaDeviceSynchronize());
     sleep(3.0);
-    float perf_v3 = benchmark(nvfp4_gemm_v3, M, N, K, 1000);
+    float perf_v3 = benchmark(nvfp4_gemm_v3, M, N, K, 100);
+    CUDA_CHECK(cudaDeviceSynchronize());
     sleep(3.0);
-    float perf_v4 = benchmark(nvfp4_gemm_v4, M, N, K, 1000);
+    float perf_v4 = benchmark(nvfp4_gemm_v4, M, N, K, 100);
+    CUDA_CHECK(cudaDeviceSynchronize());
     sleep(3.0);
-    float perf_v5 = benchmark(nvfp4_gemm_v5, M, N, K, 1000);
+    float perf_v5 = benchmark(nvfp4_gemm_v5, M, N, K, 100);
+    CUDA_CHECK(cudaDeviceSynchronize());
     sleep(3.0);
-    float perf_v6 = benchmark(nvfp4_gemm_v6<M, N, K>, M, N, K, 1000);
+    float perf_v6 = benchmark(nvfp4_gemm_v6, M, N, K, 100);
+    CUDA_CHECK(cudaDeviceSynchronize());
+    sleep(3.0);
+    float perf_v7 = benchmark(nvfp4_gemm_v7, M, N, K, 100);
+    CUDA_CHECK(cudaDeviceSynchronize());
     std::cout << "Performance Ref: " << perf_ref << " ms\n";
     std::cout << "Performance V1: " << perf_v1 << " ms\n";
     std::cout << "Performance V2: " << perf_v2 << " ms\n";
@@ -108,5 +115,5 @@ int main(int argc, char* argv[]){
     std::cout << "Performance V4: " << perf_v4 << " ms\n";
     std::cout << "Performance V5: " << perf_v5 << " ms\n";
     std::cout << "Performance V6: " << perf_v6 << " ms\n";
-    CUDA_CHECK(cudaDeviceSynchronize());
+    std::cout << "Performance V7: " << perf_v7 << " ms\n";
 }
