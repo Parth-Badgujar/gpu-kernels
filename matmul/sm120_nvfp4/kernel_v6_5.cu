@@ -1,15 +1,10 @@
 #include <cstdint>
-#include <stdio.h>
-#include <iostream>
 #include <cuda_runtime.h>
-#include <cuda_fp16.h>
-#include <cuda_fp8.h>
 #include <cuda.h>
 #include <torch/torch.h>
 #include "../../include/mma_sync.cuh"
 #include "../../include/tma.cuh"
 #include "../../include/mbarrier.cuh"
-#include "../../include/fence.cuh"
 #include "../../include/others.cuh"
 #include "../../include/ldmatrix.cuh"
 
@@ -17,30 +12,44 @@
 #define MMA_M 16
 #define MMA_N 8
 
-__device__ __forceinline__ int2 get_grid_coords(int bid, int M_BLOCKS, int N_BLOCKS) {
-    constexpr int TILE_SIZE = 8; 
-    int tiles_per_row = N_BLOCKS / TILE_SIZE;
-    int super_tile_id = bid / (TILE_SIZE * TILE_SIZE);
-    int local_id = bid % (TILE_SIZE * TILE_SIZE);
+__device__ __forceinline__
+int2 get_grid_coords(int bid, int M_BLOCKS, int N_BLOCKS) {
+    // constexpr int TILE_SIZE = 8;
+    int tiles_per_row = N_BLOCKS >> 3;
+    if (tiles_per_row == 0) return make_int2(bid % M_BLOCKS, bid / M_BLOCKS);
+
+    int super_tile_id = bid >> 6;
+    int local_id = bid & 63;
 
     int super_tile_row = super_tile_id / tiles_per_row;
     int super_tile_col = super_tile_id % tiles_per_row;
 
-    int local_row = local_id / TILE_SIZE;
-    int local_col = local_id % TILE_SIZE;
+    int local_row = local_id >> 3;
+    int local_col = local_id & 7;
 
-    int m_block = super_tile_row * TILE_SIZE + local_row;
-    int n_block = super_tile_col * TILE_SIZE + local_col;
+    int m_block = (super_tile_row << 3) + local_row;
+    int n_block = (super_tile_col << 3) + local_col;
 
     if (m_block >= M_BLOCKS || n_block >= N_BLOCKS) {
         m_block = bid % M_BLOCKS;
         n_block = bid / M_BLOCKS;
     }
+
     return make_int2(m_block, n_block);
 }
 
+__device__ __forceinline__
+int phase_idx(uint32_t &phase, int idx) {
+    return (phase >> idx) & 1;
+}
+
+__device__ __forceinline__
+void phase_flip_idx(uint32_t &phase, int idx) {
+    phase ^= (1 << idx);
+}
+
 template<int BLOCK_M = 128, int BLOCK_N = 128, int BLOCK_K = 64, int NUM_STAGES = 1>
-__global__ void _nvfp4_gemm_v6(
+__global__ void _nvfp4_gemm_v6_5(
     const uint8_t* __restrict__ gSFA,
     const uint8_t* __restrict__ gSFB,
     const __grid_constant__ CUtensorMap tmap_A,
@@ -53,7 +62,7 @@ __global__ void _nvfp4_gemm_v6(
     constexpr int sSFA_mem = (BLOCK_M * BLOCK_K / 16);
     constexpr int sSFB_mem = (BLOCK_N * BLOCK_K / 16);
     constexpr int STAGE_SIZE = sA_mem + sB_mem + sSFA_mem + sSFB_mem;
-    constexpr int WARP_M = BLOCK_M / 2;
+    constexpr int WARP_M = BLOCK_M / 4;
     constexpr int WARP_N = BLOCK_N / 2;
     __shared__ alignas(1024) uint8_t  smem[STAGE_SIZE * NUM_STAGES];
     __shared__ alignas(128) uint64_t load_mbar_ptr[NUM_STAGES];
@@ -62,8 +71,8 @@ __global__ void _nvfp4_gemm_v6(
     int warp_id = threadIdx.x / 32;
     int lane_id = threadIdx.x % 32;
     int quad_id = lane_id / 4;
-    int load_phase[NUM_STAGES] = {0};
-    int compute_phase[NUM_STAGES] = {0};
+    uint32_t load_phases = 0;    
+    uint32_t compute_phases = 0;
     int lane_id_in_quad = lane_id % 4;
     int wid_x = warp_id / 2;
     int wid_y = warp_id % 2;
@@ -73,12 +82,12 @@ __global__ void _nvfp4_gemm_v6(
     uint32_t load_mbar = __cvta_generic_to_shared(load_mbar_ptr);
     if (warp_id == 0 && elect_sync()) {
         for(int i = 0; i < NUM_STAGES; i++){
-            mbarrier_init(compute_mbar + i * 8, 32 * 4);
+            mbarrier_init(compute_mbar + i * 8, 32 * 8);
             mbarrier_init(load_mbar + i * 8, 1);
         }
         fence_mbarrier_init();
         for(int i = 0; i < NUM_STAGES; i++)
-            mbarrier_arrive_count(compute_mbar + i * 8, 32 * 4);
+            mbarrier_arrive_count(compute_mbar + i * 8, 32 * 8);
     }
     __syncthreads();
 
@@ -106,18 +115,18 @@ __global__ void _nvfp4_gemm_v6(
         uint32_t* sfb_ptr = (uint32_t*)__cvta_shared_to_generic(sSFB + stage_id * STAGE_SIZE);
         uint32_t sA_curr = sA + stage_id * STAGE_SIZE;
         uint32_t sB_curr = sB + stage_id * STAGE_SIZE;
+        int row_sf = (quad_id + lane_id_in_quad * 8);
         #pragma unroll
         for(int mma_m = 0; mma_m < WARP_M / MMA_M; mma_m += 2){
-            int row = quad_id + lane_id_in_quad * 8;
             int col = wid_x * 2 + (mma_m / 2);
-            rSFA[reg_phase][mma_m / 2] = sfa_ptr[128 * mma_k + col + row * 4];
+            rSFA[reg_phase][mma_m / 2] = sfa_ptr[(mma_k << 7) + col + (row_sf << 2)];
         }
         #pragma unroll
         for(int mma_n = 0; mma_n < WARP_N / MMA_N; mma_n += 4){
-            int row = quad_id + lane_id_in_quad * 8;
             int col = wid_y * 2 + (mma_n / 4);
-            rSFB[reg_phase][mma_n / 4] = sfb_ptr[128 * mma_k + col + row * 4];
+            rSFB[reg_phase][mma_n / 4] = sfb_ptr[(mma_k << 7) + col + (row_sf << 2)];
         }
+
         #pragma unroll
         for(int mma_m = 0; mma_m < WARP_M / MMA_M; mma_m++){
             int col = mma_k * (MMA_K / 2) + (lane_id / 16) * 16;
@@ -132,7 +141,7 @@ __global__ void _nvfp4_gemm_v6(
         }
     };
 
-    auto compute = [&](int reg_phase, bool acc){
+    auto compute = [&](int reg_phase){
         #pragma unroll
         for(int mma_m = 0; mma_m < WARP_M / MMA_M; mma_m++){
             #pragma unroll
@@ -141,7 +150,7 @@ __global__ void _nvfp4_gemm_v6(
                     rC[mma_m][mma_n],
                     rA[reg_phase][mma_m],
                     rB[reg_phase][mma_n],
-                    acc ? rC[mma_m][mma_n] : zero,
+                    rC[mma_m][mma_n],
                     rSFA[reg_phase][mma_m / 2],
                     rSFB[reg_phase][mma_n / 4],
                     0,
@@ -176,40 +185,39 @@ __global__ void _nvfp4_gemm_v6(
     int NUM_BLOCKS = M_BLOCKS * N_BLOCKS;
     int bid = blockIdx.x;
     int stage_id = 0;
-    if (warp_id < 4){
-        int reg_phase = 0;
+    gC += (wid_x * WARP_M) * N + (wid_y * WARP_N);
+    if (warp_id < 8){
         while(bid < NUM_BLOCKS){
             int2 coords = get_grid_coords(bid, M_BLOCKS, N_BLOCKS);
             int off_m = coords.x * BLOCK_M;
             int off_n = coords.y * BLOCK_N;
+            memset(rC, 0, sizeof(rC));
             for(int iter_k = 0; iter_k < K / BLOCK_K; iter_k ++){
-                mbarrier_wait(load_mbar + stage_id * 8, load_phase[stage_id]);
-                load_phase[stage_id] ^= 1;
-                load_regs(0, stage_id, reg_phase);
-                reg_phase ^= 1;
-                #pragma unroll
-                for(int mma_k = 1; mma_k < BLOCK_K / MMA_K; mma_k++){
-                    load_regs(mma_k, stage_id, reg_phase);
-                    reg_phase ^= 1;
-                    compute(reg_phase, (iter_k != 0) || (mma_k != 1));
-                }
+                mbarrier_wait(load_mbar + stage_id * 8, phase_idx(load_phases, stage_id));
+                phase_flip_idx(load_phases, stage_id);
+                load_regs(0, stage_id, 0);
+                load_regs(1, stage_id, 1);
+                compute(0);
+                load_regs(2, stage_id, 0);
+                compute(1);
+                load_regs(3, stage_id, 1);
+                compute(0);
+                compute(1);
                 mbarrier_arrive(compute_mbar + stage_id * 8);
-                reg_phase ^= 1;
-                compute(reg_phase, true);
                 stage_id = (stage_id + 1) % NUM_STAGES;
             }
-            store(gC + (off_m + wid_x * WARP_M) * N + (off_n + wid_y * WARP_N));
+            store(gC + off_m * N + off_n);
             bid += gridDim.x;
         }
     }
-    else if (warp_id == 4){
+    else if (warp_id == 8){
         while(bid < NUM_BLOCKS){
             int2 coords = get_grid_coords(bid, M_BLOCKS, N_BLOCKS);
             int off_m = coords.x * BLOCK_M;
             int off_n = coords.y * BLOCK_N;
             for(int iter_k = 0; iter_k < K / BLOCK_K; iter_k ++){
-                mbarrier_wait(compute_mbar + stage_id * 8, compute_phase[stage_id]);
-                compute_phase[stage_id] ^= 1;
+                mbarrier_wait(compute_mbar + stage_id * 8, phase_idx(compute_phases, stage_id));
+                phase_flip_idx(compute_phases, stage_id);
                 if (elect_sync()){
                     mbarrier_arrive_expect_tx(load_mbar + stage_id * 8, STAGE_SIZE);
                     load_smem(iter_k, stage_id, off_n, off_m);
@@ -220,7 +228,6 @@ __global__ void _nvfp4_gemm_v6(
         }
     }
 }
-
 
 static CUtensorMap make_tma_descriptor_fp4_A(void *global_addr, uint64_t M,
                                              uint32_t K, uint32_t BLOCK_M,
@@ -254,20 +261,32 @@ static CUtensorMap make_tma_descriptor_fp4_B(void *global_addr, uint64_t N,
     return tma_desc;
 }
 
-torch::Tensor nvfp4_gemm_v6(const torch::Tensor& a, const torch::Tensor& b, const torch::Tensor& sfa, const torch::Tensor& sfb){
-    int M = a.size(0);
-    int N = b.size(0);
-    int K = a.size(1) * 2;
+torch::Tensor nvfp4_gemm_v6_5(
+    const torch::Tensor& A,
+    const torch::Tensor& B,
+    const torch::Tensor& SF_A,
+    const torch::Tensor& SF_B
+){
+    int M = A.size(0);
+    int N = B.size(0);
+    int K = A.size(1) * 2;
     auto options = torch::TensorOptions().dtype(torch::kFloat).device(torch::kCUDA);
-    torch::Tensor c = torch::empty({M, N}, options);
+    torch::Tensor C = torch::empty({M, N}, options);
     constexpr int BLOCK_M = 128;
     constexpr int BLOCK_N = 128;
     constexpr int BLOCK_K = 256;
     constexpr int NUM_STAGES = 2;
     dim3 grid(70, 1, 1);
-    dim3 block(5 * 32, 1, 1);
-    CUtensorMap tma_A = make_tma_descriptor_fp4_A(a.view(torch::kUInt8).data_ptr<uint8_t>(), M, K, BLOCK_M, BLOCK_K);
-    CUtensorMap tma_B = make_tma_descriptor_fp4_B(b.view(torch::kUInt8).data_ptr<uint8_t>(), N, K, BLOCK_N, BLOCK_K);
-    _nvfp4_gemm_v6<BLOCK_M, BLOCK_N, BLOCK_K, NUM_STAGES><<<grid, block>>>(sfa.view(torch::kUInt8).data_ptr<uint8_t>(), sfb.view(torch::kUInt8).data_ptr<uint8_t>(), tma_A, tma_B, c.data_ptr<float>(), M, N, K);
-    return c;
+    dim3 block(9 * 32, 1, 1);
+    CUtensorMap tma_A = make_tma_descriptor_fp4_A(A.view(torch::kUInt8).data_ptr<uint8_t>(), M, K, BLOCK_M, BLOCK_K);
+    CUtensorMap tma_B = make_tma_descriptor_fp4_B(B.view(torch::kUInt8).data_ptr<uint8_t>(), N, K, BLOCK_N, BLOCK_K);
+    _nvfp4_gemm_v6_5<BLOCK_M, BLOCK_N, BLOCK_K, NUM_STAGES><<<grid, block>>>(
+        SF_A.view(torch::kUInt8).data_ptr<uint8_t>(),
+        SF_B.view(torch::kUInt8).data_ptr<uint8_t>(),
+        tma_A,
+        tma_B,
+        C.data_ptr<float>(),
+        M, N, K
+    );
+    return C;
 }

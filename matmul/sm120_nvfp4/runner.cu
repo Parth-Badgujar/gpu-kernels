@@ -1,11 +1,10 @@
 #include <cstdint>
-#include <vector>
-#include <optional>
-#include <iostream>
+#include <cuda_runtime_api.h>
 #include <unistd.h>
+#include <iostream>
+#include "kernel_headers.cuh"
 #include <torch/torch.h>
 #include <ATen/cuda/CUDAGeneratorImpl.h>
-#include "kernels.cuh"
 #include "../../include/others.cuh"
 
 auto create_tensors(int M, int N, int K, int sf_vec_size = 16, uint64_t seed = 42) {
@@ -28,8 +27,7 @@ auto create_tensors(int M, int N, int K, int sf_vec_size = 16, uint64_t seed = 4
     return std::make_tuple(a, b, sfa, sfb);
 }
 
-
-auto reference_kernel(torch::Tensor a, torch::Tensor b, torch::Tensor sfa, torch::Tensor sfb){
+auto reference_kernel(const torch::Tensor& a, const torch::Tensor& b, const torch::Tensor& sfa, const torch::Tensor& sfb){
     auto res = torch::_scaled_mm(
         a,
         b.transpose(0, 1),
@@ -42,7 +40,7 @@ auto reference_kernel(torch::Tensor a, torch::Tensor b, torch::Tensor sfa, torch
     return res;
 }
 
-float benchmark(auto kernel, int M, int N, int K, int rep = 1000, int warmup = 500){
+float benchmark(auto kernel, int M, int N, int K, int rep = 100, int warmup = 50){
     cudaEvent_t start_event, end_event;
     cudaEventCreate(&start_event);
     cudaEventCreate(&end_event);
@@ -77,43 +75,58 @@ float benchmark(auto kernel, int M, int N, int K, int rep = 1000, int warmup = 5
     return milliseconds / (float)rep;
 }
 
-int main(int argc, char* argv[]){
-    if (argc != 4){
-        printf("Usage: %s <M> <N> <K>\n", argv[0]);
-        return 1;
-    }
-    int M = atoi(argv[1]);
-    int N = atoi(argv[2]);
-    int K = atoi(argv[3]);
-    float perf_ref = benchmark(reference_kernel, M, N, K, 100);
-    CUDA_CHECK(cudaDeviceSynchronize());
-    sleep(3.0);
-    float perf_v1 = benchmark(nvfp4_gemm_v1, M, N, K, 100);
-    CUDA_CHECK(cudaDeviceSynchronize());
-    sleep(3.0);
-    float perf_v2 = benchmark(nvfp4_gemm_v2, M, N, K, 100);
-    CUDA_CHECK(cudaDeviceSynchronize());
-    sleep(3.0);
-    float perf_v3 = benchmark(nvfp4_gemm_v3, M, N, K, 100);
-    CUDA_CHECK(cudaDeviceSynchronize());
-    sleep(3.0);
-    float perf_v4 = benchmark(nvfp4_gemm_v4, M, N, K, 100);
-    CUDA_CHECK(cudaDeviceSynchronize());
-    sleep(3.0);
-    float perf_v5 = benchmark(nvfp4_gemm_v5, M, N, K, 100);
-    CUDA_CHECK(cudaDeviceSynchronize());
-    sleep(3.0);
-    float perf_v6 = benchmark(nvfp4_gemm_v6, M, N, K, 100);
-    CUDA_CHECK(cudaDeviceSynchronize());
-    sleep(3.0);
-    float perf_v7 = benchmark(nvfp4_gemm_v7, M, N, K, 100);
-    CUDA_CHECK(cudaDeviceSynchronize());
-    std::cout << "Performance Ref: " << perf_ref << " ms\n";
-    std::cout << "Performance V1: " << perf_v1 << " ms\n";
-    std::cout << "Performance V2: " << perf_v2 << " ms\n";
-    std::cout << "Performance V3: " << perf_v3 << " ms\n";
-    std::cout << "Performance V4: " << perf_v4 << " ms\n";
-    std::cout << "Performance V5: " << perf_v5 << " ms\n";
-    std::cout << "Performance V6: " << perf_v6 << " ms\n";
-    std::cout << "Performance V7: " << perf_v7 << " ms\n";
+bool correction(auto kernel, int M, int N, int K){
+    auto [a, b, sfa, sfb] = create_tensors(M, N, K);
+    auto res_ref = reference_kernel(a, b, sfa, sfb);
+    auto res_kernel = kernel(a, b, sfa, sfb);
+    cudaDeviceSynchronize();
+    return torch::allclose(res_ref, res_kernel, 1e-4, 1e-4);
+}
+
+int main(){
+    auto kernels = std::map<std::string, decltype(&nvfp4_gemm_v1)>{
+        {"kernel_v1", &nvfp4_gemm_v1}, 
+        {"kernel_v2", &nvfp4_gemm_v2}, 
+        {"kernel_v3", &nvfp4_gemm_v3}, 
+        {"kernel_v4", &nvfp4_gemm_v4}, 
+        {"kernel_v5", &nvfp4_gemm_v5}, 
+        {"kernel_v6", &nvfp4_gemm_v6}, 
+        {"kernel_v6.5", &nvfp4_gemm_v8},
+        {"kernel_v8", &nvfp4_gemm_v9}, 
+        {"cuBLAS",    &reference_kernel}
+    };
+    
+    auto run_correction = [&](int M, int N, int K){
+        std::cout << "--------- Shape (" << M << ", " << N << ", " << K << ") ---------\n";
+        for(auto kernel : kernels){
+            bool value = correction(kernel.second, M, N, K);
+            std::cout << kernel.first << " : " << value << "\n"; 
+        }
+    };
+
+    auto run_benchmark = [&](int M, int N, int K){
+        std::cout << "--------- Shape (" << M << ", " << N << ", " << K << ") ---------\n";
+        for(auto kernel : kernels){
+            float time = benchmark(kernel.second, M, N, K);
+            sleep(2.0);
+            std::cout << kernel.first << " : " << time << " ms\n"; 
+        }
+    };
+
+    //Some issue with 6.5 version (ignore that)
+    run_correction(128, 128, 256);
+    run_correction(256, 256, 256);
+    run_correction(512, 512, 512);
+    run_correction(1024, 1024, 1024);
+    run_correction(2048, 2048, 2048);
+    run_correction(4096, 4096, 4096);
+    run_correction(8192, 8192, 8192);
+    run_correction(16384, 16384, 16384);
+    run_benchmark(256, 256, 256);
+    run_benchmark(512, 512, 512);
+    run_benchmark(1024, 1024, 1024);
+    run_benchmark(2048, 2048, 2048);
+    run_benchmark(4096, 4096, 4096);
+    run_benchmark(8192, 8192, 8192);
+    run_benchmark(16384, 16384, 16384);
 }

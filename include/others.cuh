@@ -6,59 +6,34 @@
 
 class CUDAtimer {
 public :
-    cudaEvent_t start; 
-    cudaEvent_t stop; 
+    cudaEvent_t start;
+    cudaEvent_t stop;
     CUDAtimer(){
-        cudaEventCreate(&this->start); 
-        cudaEventCreate(&this->stop); 
+        cudaEventCreate(&this->start);
+        cudaEventCreate(&this->stop);
     }
     void start_timer(){
-        cudaEventRecord(this->start, 0); 
+        cudaEventRecord(this->start, 0);
     }
     void stop_timer(){
-        cudaEventRecord(this->stop, 0); 
-        cudaEventSynchronize(this->stop); 
+        cudaEventRecord(this->stop, 0);
+        cudaEventSynchronize(this->stop);
     }
     float get_time(){
-        float ms; 
-        cudaEventElapsedTime(&ms, this->start,this->stop); 
-        return ms; 
+        float ms;
+        cudaEventElapsedTime(&ms, this->start,this->stop);
+        return ms;
     }
     ~CUDAtimer() {
-        cudaEventDestroy(this->start); 
-        cudaEventDestroy(this->stop); 
+        cudaEventDestroy(this->start);
+        cudaEventDestroy(this->stop);
     }
 };
 
-static void print(std::vector<float>& arr, int num)
-{
-    for(int i = 0 ; i < num; i++){
-        std::cout << arr[i] <<  " "; 
-    }
-    std::cout << std::endl; 
-}
-
-static void print(std::vector<float>& arr, int num, const char* name)
-{
-    std::cout << name << " : "; 
-    for(int i = 0 ; i < num; i++){
-        std::cout << arr[i] <<  " "; 
-    }
-    std::cout << std::endl; 
-}
-
 static int cdiv(int a, int b)
 {
-    return (a + b - 1) / b; 
+    return (a + b - 1) / b;
 }
-
-
-enum class Device {
-    CPU, 
-    GPU,
-}; 
-
-
 
 #define CUDA_CHECK(val) check((val), #val, __FILE__, __LINE__)
 static void check(cudaError_t err, char const* func, char const* file, int line)
@@ -85,7 +60,6 @@ static void check_last(char const* file, int line)
     }
 }
 
-
 __device__ __forceinline__
 float4 load_bypass_cache(float4* ptr) {
     float4 val;
@@ -96,7 +70,6 @@ float4 load_bypass_cache(float4* ptr) {
     );
     return val;
 }
-
 
 __device__ __forceinline__
 void prefetch_L2(float4* ptr) {
@@ -131,10 +104,10 @@ void cluster_all_reduce(T* data, int cluster_rank, cooperative_groups::cluster_g
 template <class T, size_t BLOCK_SIZE>
 __device__ __forceinline__
 void block_reduce(T* smem1){
-    #pragma unroll              
+    #pragma unroll
     for(int stride = BLOCK_SIZE / 2; stride > 16; stride >>= 1){
         if (threadIdx.x < stride){
-            T sval = smem1[threadIdx.x + stride]; 
+            T sval = smem1[threadIdx.x + stride];
             smem1[threadIdx.x]  += sval;
         }
         __syncthreads();
@@ -149,7 +122,7 @@ void block_reduce(T* smem1){
         val1 += __shfl_down_sync(FULL_MASK, val1, 1);
         if(threadIdx.x == 0){
             smem1[0] = val1;
-        }    
+        }
     }
     __syncthreads();
 }
@@ -158,10 +131,10 @@ template <class T, size_t BLOCK_SIZE>
 __device__ __forceinline__
 void double_block_reduce(T* smem1, T* smem2){
     static_assert(BLOCK_SIZE >= 64);
-    #pragma unroll              
+    #pragma unroll
     for(int stride = BLOCK_SIZE / 2; stride > 16; stride >>= 1){
         if (threadIdx.x < stride){
-            T sval1 = smem1[threadIdx.x + stride]; 
+            T sval1 = smem1[threadIdx.x + stride];
             smem1[threadIdx.x]  += sval1;
         }
         if (threadIdx.x >= (BLOCK_SIZE - stride)){
@@ -180,7 +153,7 @@ void double_block_reduce(T* smem1, T* smem2){
         val1 += __shfl_down_sync(FULL_MASK, val1, 1);
         if((threadIdx.x & 31) == 0){
             smem1[0] = val1;
-        }    
+        }
     }
     if (threadIdx.x >= (BLOCK_SIZE - 32)){
         auto FULL_MASK = 0xFFFFFFFF;
@@ -214,9 +187,10 @@ static size_t next_power_of_2(size_t num){
 }
 
 
-__device__ __forceinline__ uint32_t elect_sync() {
-  uint32_t pred = 0;
-  asm volatile(
+__device__ __forceinline__
+uint32_t elect_sync() {
+    uint32_t pred = 0;
+    asm volatile(
     "{\n\t"
     ".reg .pred %%px;\n\t"
     "elect.sync _|%%px, %1;\n\t"
@@ -224,8 +198,8 @@ __device__ __forceinline__ uint32_t elect_sync() {
     "}"
     : "+r"(pred)
     : "r"(0xFFFFFFFF)
-  );
-  return pred;
+    );
+    return pred;
 }
 
 __device__ __forceinline__
@@ -255,9 +229,10 @@ void load256(void* ptr, uint32_t* src)
 }
 
 template <int B, int M, int S>
-__device__ __forceinline__ uint32_t swizzle(uint32_t addr) {
-    constexpr uint32_t bit_msk = (1 << B) - 1; 
-    constexpr uint32_t yyy_msk = bit_msk << (M + S); 
+__device__ __forceinline__
+uint32_t swizzle(uint32_t addr) {
+    constexpr uint32_t bit_msk = (1 << B) - 1;
+    constexpr uint32_t yyy_msk = bit_msk << (M + S);
     uint32_t shift_val = (addr & yyy_msk) >> S;
     return addr ^ shift_val;
 }
@@ -271,4 +246,20 @@ void streaming_store_f32x2(float* addr, float2 val) {
         : "l"(addr), "f"(val.x), "f"(val.y)
         : "memory"
     );
+}
+
+template <uint32_t RegCount>
+__device__ __forceinline__
+void setmaxnreg_dec() {
+    asm volatile("setmaxnreg.dec.sync.aligned.u32 %0;\n"
+                 :
+                 : "n"(RegCount));
+}
+
+template <uint32_t RegCount>
+__device__ __forceinline__
+void setmaxnreg_inc() {
+    asm volatile("setmaxnreg.inc.sync.aligned.u32 %0;\n"
+                 :
+                 : "n"(RegCount));
 }

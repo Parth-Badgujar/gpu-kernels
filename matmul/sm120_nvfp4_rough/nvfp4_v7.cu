@@ -58,8 +58,11 @@ __global__ void _nvfp4_gemm_v7(
     int warp_id = threadIdx.x / 32;
     int lane_id = threadIdx.x % 32;
     int quad_id = lane_id / 4;
-    int load_phase[NUM_STAGES] = {0};
-    int compute_phase[NUM_STAGES] = {0};
+    // int load_phase[NUM_STAGES] = {0};
+    // int compute_phase[NUM_STAGES] = {0};
+    // 1 register can hold up to 32 stages. 0 local memory.
+    uint32_t load_phases = 0;    
+    uint32_t compute_phases = 0;
     int lane_id_in_quad = lane_id % 4;
     int wid_x = warp_id / 2;
     int wid_y = warp_id % 2;
@@ -102,18 +105,18 @@ __global__ void _nvfp4_gemm_v7(
         uint32_t* sfb_ptr = (uint32_t*)__cvta_shared_to_generic(sSFB + stage_id * STAGE_SIZE);
         uint32_t sA_curr = sA + stage_id * STAGE_SIZE;
         uint32_t sB_curr = sB + stage_id * STAGE_SIZE;
+        int row_sf = (quad_id + lane_id_in_quad * 8);
         #pragma unroll
         for(int mma_m = 0; mma_m < WARP_M / MMA_M; mma_m += 2){
-            int row = quad_id + lane_id_in_quad * 8;
-            int col = wid_x;
-            rSFA[reg_phase][mma_m / 2] = sfa_ptr[128 * mma_k + col + row * 4];
+            int col = wid_x * 2 + (mma_m / 2);
+            rSFA[reg_phase][mma_m / 2] = sfa_ptr[(mma_k << 7) + col + (row_sf << 2)];
         }
         #pragma unroll
         for(int mma_n = 0; mma_n < WARP_N / MMA_N; mma_n += 4){
-            int row = quad_id + lane_id_in_quad * 8;
             int col = wid_y * 2 + (mma_n / 4);
-            rSFB[reg_phase][mma_n / 4] = sfb_ptr[128 * mma_k + col + row * 4];
+            rSFB[reg_phase][mma_n / 4] = sfb_ptr[(mma_k << 7) + col + (row_sf << 2)];
         }
+
         #pragma unroll
         for(int mma_m = 0; mma_m < WARP_M / MMA_M; mma_m++){
             int col = mma_k * (MMA_K / 2) + (lane_id / 16) * 16;
@@ -172,29 +175,26 @@ __global__ void _nvfp4_gemm_v7(
     int NUM_BLOCKS = M_BLOCKS * N_BLOCKS;
     int bid = blockIdx.x;
     int stage_id = 0;
+    gC += (wid_x * WARP_M) * N + (wid_y * WARP_N);
     if (warp_id < 8){
-        int reg_phase = 0;
         while(bid < NUM_BLOCKS){
             int2 coords = get_grid_coords(bid, M_BLOCKS, N_BLOCKS);
             int off_m = coords.x * BLOCK_M;
             int off_n = coords.y * BLOCK_N;
             for(int iter_k = 0; iter_k < K / BLOCK_K; iter_k ++){
-                mbarrier_wait(load_mbar + stage_id * 8, load_phase[stage_id]);
-                load_phase[stage_id] ^= 1;
-                load_regs(0, stage_id, reg_phase);
-                reg_phase ^= 1;
+                mbarrier_wait(load_mbar + stage_id * 8, (load_phases >> stage_id) & 1);
+                load_phases ^= (1 << stage_id);
+                load_regs(0, stage_id, 0);
                 #pragma unroll
                 for(int mma_k = 1; mma_k < BLOCK_K / MMA_K; mma_k++){
-                    load_regs(mma_k, stage_id, reg_phase);
-                    reg_phase ^= 1;
-                    compute(reg_phase, (iter_k != 0) || (mma_k != 1));
+                    load_regs(mma_k, stage_id, mma_k & 1);
+                    compute((mma_k - 1) & 1, (iter_k != 0) || (mma_k != 1));
                 }
                 mbarrier_arrive(compute_mbar + stage_id * 8);
-                reg_phase ^= 1;
-                compute(reg_phase, true);
+                compute((BLOCK_K / MMA_K - 1) & 1, true);
                 stage_id = (stage_id + 1) % NUM_STAGES;
             }
-            store(gC + (off_m + wid_x * WARP_M) * N + (off_n + wid_y * WARP_N));
+            store(gC + off_m * N + off_n);
             bid += gridDim.x;
         }
     }
@@ -204,8 +204,8 @@ __global__ void _nvfp4_gemm_v7(
             int off_m = coords.x * BLOCK_M;
             int off_n = coords.y * BLOCK_N;
             for(int iter_k = 0; iter_k < K / BLOCK_K; iter_k ++){
-                mbarrier_wait(compute_mbar + stage_id * 8, compute_phase[stage_id]);
-                compute_phase[stage_id] ^= 1;
+                mbarrier_wait(compute_mbar + stage_id * 8, (compute_phases >> stage_id) & 1);
+                compute_phases ^= (1 << stage_id);
                 if (elect_sync()){
                     mbarrier_arrive_expect_tx(load_mbar + stage_id * 8, STAGE_SIZE);
                     load_smem(iter_k, stage_id, off_n, off_m);
@@ -216,7 +216,6 @@ __global__ void _nvfp4_gemm_v7(
         }
     }
 }
-
 
 static CUtensorMap make_tma_descriptor_fp4_A(void *global_addr, uint64_t M,
                                              uint32_t K, uint32_t BLOCK_M,
