@@ -5,7 +5,6 @@
 #include "kernel_headers.cuh"
 #include <torch/torch.h>
 #include <ATen/cuda/CUDAGeneratorImpl.h>
-#include "../../include/others.cuh"
 
 auto create_tensors(int M, int N, int K, int sf_vec_size = 16, uint64_t seed = 42) {
     int device_id;
@@ -27,7 +26,12 @@ auto create_tensors(int M, int N, int K, int sf_vec_size = 16, uint64_t seed = 4
     return std::make_tuple(a, b, sfa, sfb);
 }
 
-auto reference_kernel(const torch::Tensor& a, const torch::Tensor& b, const torch::Tensor& sfa, const torch::Tensor& sfb){
+auto reference_kernel(
+    const torch::Tensor& a,
+    const torch::Tensor& b,
+    const torch::Tensor& sfa,
+    const torch::Tensor& sfb
+){
     auto res = torch::_scaled_mm(
         a,
         b.transpose(0, 1),
@@ -84,36 +88,44 @@ bool correction(auto kernel, int M, int N, int K){
 }
 
 int main(){
+    //Some issue with v7 version (ignore that)
     auto kernels = std::map<std::string, decltype(&nvfp4_gemm_v1)>{
-        {"kernel_v1", &nvfp4_gemm_v1}, 
-        {"kernel_v2", &nvfp4_gemm_v2}, 
-        {"kernel_v3", &nvfp4_gemm_v3}, 
-        {"kernel_v4", &nvfp4_gemm_v4}, 
-        {"kernel_v5", &nvfp4_gemm_v5}, 
-        {"kernel_v6", &nvfp4_gemm_v6}, 
-        {"kernel_v6.5", &nvfp4_gemm_v8},
-        {"kernel_v8", &nvfp4_gemm_v9}, 
+        {"kernel_v1", &nvfp4_gemm_v1},
+        {"kernel_v2", &nvfp4_gemm_v2},
+        {"kernel_v3", &nvfp4_gemm_v3},
+        {"kernel_v4", &nvfp4_gemm_v4},
+        {"kernel_v5", &nvfp4_gemm_v5},
+        {"kernel_v6", &nvfp4_gemm_v6},
+        // {"kernel_v7", &nvfp4_gemm_v7},
+        {"kernel_v8", &nvfp4_gemm_v8},
+        {"kernel_v9", &nvfp4_gemm_v9},
         {"cuBLAS",    &reference_kernel}
     };
-    
-    auto run_correction = [&](int M, int N, int K){
-        std::cout << "--------- Shape (" << M << ", " << N << ", " << K << ") ---------\n";
-        for(auto kernel : kernels){
+
+    auto run_correction = [&](int M, int N, int K) {
+        std::cout << "\nShape (" << M << ", " << N << ", " << K << ")\n";
+        std::cout << std::left << std::setw(20) << "Kernel" << "Correct?\n";
+        std::cout << std::string(28, '-') << "\n";
+        for (auto kernel : kernels) {
             bool value = correction(kernel.second, M, N, K);
-            std::cout << kernel.first << " : " << value << "\n"; 
+            std::cout << std::left << std::setw(20) << kernel.first
+                    << (value ? "true" : "false") << "\n";
         }
     };
 
-    auto run_benchmark = [&](int M, int N, int K){
-        std::cout << "--------- Shape (" << M << ", " << N << ", " << K << ") ---------\n";
-        for(auto kernel : kernels){
-            float time = benchmark(kernel.second, M, N, K);
+    auto run_benchmark = [&](int M, int N, int K) {
+        std::cout << "\nShape (" << M << ", " << N << ", " << K << ")\n";
+        std::cout << std::left << std::setw(20) << "Kernel" << "TFLOPS\n";
+        std::cout << std::string(28, '-') << "\n";
+        for (auto kernel : kernels) {
+            double time = static_cast<double>(benchmark(kernel.second, M, N, K));
+            double gflops = (2.0 * M * N * K) / (time * 1e9);
             sleep(2.0);
-            std::cout << kernel.first << " : " << time << " ms\n"; 
+            std::cout << std::left << std::setw(20) << kernel.first
+                    << std::fixed << std::setprecision(3) << gflops << "\n";
         }
     };
 
-    //Some issue with 6.5 version (ignore that)
     run_correction(128, 128, 256);
     run_correction(256, 256, 256);
     run_correction(512, 512, 512);

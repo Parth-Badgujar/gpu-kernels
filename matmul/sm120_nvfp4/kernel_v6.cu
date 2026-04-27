@@ -14,10 +14,10 @@
 
 __device__ __forceinline__
 int2 get_grid_coords(int bid, int M_BLOCKS, int N_BLOCKS) {
-    // constexpr int TILE_SIZE = 8; 
+    // constexpr int TILE_SIZE = 8;
     int tiles_per_row = N_BLOCKS >> 3;
     if (tiles_per_row == 0) return make_int2(bid % M_BLOCKS, bid / M_BLOCKS);
-    
+
     int super_tile_id = bid >> 6;
     int local_id = bid & 63;
 
